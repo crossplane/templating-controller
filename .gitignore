@@ -1,0 +1,10 @@
+/.cache
+/.work
+/_output
+/config/
+/config
+cover.out
+/vendor
+/.vendor-new
+/.idea
+/.DS_Store
