@@ -36,10 +36,47 @@ type ChildResource interface {
 	metav1.Object
 }
 
-type KustomizeOverrider interface {
-	Process(ParentResource, *types.Kustomization)
+type KustomizationPatcher interface {
+	Patch(ParentResource, *types.Kustomization) error
 }
 
-type PreApplyOverrider interface {
-	Override(ParentResource, []ChildResource)
+type ChildResourcePatcher interface {
+	Patch(ParentResource, []ChildResource) ([]ChildResource, error)
+}
+
+type KustomizationPatcherFunc func(ParentResource, *types.Kustomization) error
+
+func (kof KustomizationPatcherFunc) Patch(cr ParentResource, k *types.Kustomization) error {
+	return kof(cr, k)
+}
+
+type KustomizationPatcherChain []KustomizationPatcher
+
+func (koc KustomizationPatcherChain) Patch(cr ParentResource, k *types.Kustomization) error {
+	for _, f := range koc {
+		if err := f.Patch(cr, k); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type ChildResourcePatcherFunc func(ParentResource, []ChildResource) ([]ChildResource, error)
+
+func (pre ChildResourcePatcherFunc) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
+	return pre(cr, list)
+}
+
+type ChildResourcePatcherChain []ChildResourcePatcher
+
+func (pre ChildResourcePatcherChain) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
+	currentList := list
+	var err error
+	for _, f := range pre {
+		currentList, err = f.Patch(cr, currentList)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return currentList, nil
 }

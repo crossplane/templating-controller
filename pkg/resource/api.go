@@ -27,23 +27,13 @@ import (
 	"github.com/crossplaneio/crossplane-runtime/pkg/meta"
 )
 
-type PreApplyOverriderFunc func(ParentResource, []ChildResource)
-
-func (pre PreApplyOverriderFunc) Override(cr ParentResource, list []ChildResource) {
-	pre(cr, list)
+func NewOwnerReferenceAdder() *OwnerReferenceAdder {
+	return &OwnerReferenceAdder{}
 }
 
-type PreApplyOverriderChain []PreApplyOverrider
+type OwnerReferenceAdder struct{}
 
-func (pre PreApplyOverriderChain) Override(cr ParentResource, list []ChildResource) {
-	for _, f := range pre {
-		f.Override(cr, list)
-	}
-}
-
-type OwnerReferenceOverrider struct{}
-
-func (lo *OwnerReferenceOverrider) Override(cr ParentResource, list []ChildResource) {
+func (lo *OwnerReferenceAdder) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
 	ref := metav1.OwnerReference{
 		APIVersion: cr.GetObjectKind().GroupVersionKind().GroupVersion().String(),
 		Kind:       cr.GetObjectKind().GroupVersionKind().Kind,
@@ -51,36 +41,39 @@ func (lo *OwnerReferenceOverrider) Override(cr ParentResource, list []ChildResou
 		UID:        cr.GetUID(),
 	}
 	for _, o := range list {
+		// TODO(muvaf): Provider kind resources are special in the sense that
+		// their deletion should be blocked until all resources provisioned with
+		// them are deleted. Since we let Kubernets garbage collector clean the
+		// resources, we skip deletion of Provider kind resources for deletions
+		// to success.
+		// Find a way to realize that dependency without bringing in too much
+		// complexity.
 		if isProvider(o) {
 			continue
 		}
 		meta.AddOwnerReference(o, ref)
 	}
+	return list, nil
 }
 
-type KustomizeOverriderFunc func(ParentResource, *types.Kustomization)
-
-func (kof KustomizeOverriderFunc) Process(cr ParentResource, k *types.Kustomization) {
-	kof(cr, k)
-}
-
-type KustomizeOverriderChain []KustomizeOverrider
-
-func (koc KustomizeOverriderChain) Process(cr ParentResource, k *types.Kustomization) {
-	for _, f := range koc {
-		f.Process(cr, k)
-	}
+func NewNamePrefixer() *NamePrefixer {
+	return &NamePrefixer{}
 }
 
 type NamePrefixer struct{}
 
-func (np *NamePrefixer) Process(cr ParentResource, k *types.Kustomization) {
+func (np *NamePrefixer) Patch(cr ParentResource, k *types.Kustomization) error {
 	k.NamePrefix = fmt.Sprintf("%s-", cr.GetName())
+	return nil
+}
+
+func NewLabelPropagator() *LabelPropagator {
+	return &LabelPropagator{}
 }
 
 type LabelPropagator struct{}
 
-func (la *LabelPropagator) Process(cr ParentResource, k *types.Kustomization) {
+func (la *LabelPropagator) Patch(cr ParentResource, k *types.Kustomization) error {
 	if k.CommonLabels == nil {
 		k.CommonLabels = map[string]string{}
 	}
@@ -89,6 +82,7 @@ func (la *LabelPropagator) Process(cr ParentResource, k *types.Kustomization) {
 	for key, val := range cr.GetLabels() {
 		k.CommonLabels[key] = val
 	}
+	return nil
 }
 
 // todo: temp until Provider interface lands on crossplane-runtime.

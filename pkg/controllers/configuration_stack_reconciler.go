@@ -49,14 +49,20 @@ const (
 
 type ConfigurationStackReconcilerOption func(*ConfigurationStackReconciler)
 
-func WithKustomizeOperation(op *operations.KustomizeOperation) ConfigurationStackReconcilerOption {
+func AdditionalKustomizationPatcher(op ...resource.KustomizationPatcher) ConfigurationStackReconcilerOption {
 	return func(reconciler *ConfigurationStackReconciler) {
-		reconciler.kustomizeOperation = op
+		reconciler.kustomizeOperation.Patcher = append(reconciler.kustomizeOperation.Patcher, op...)
 	}
 }
-func WithPreApplyOverrides(op ...resource.PreApplyOverrider) ConfigurationStackReconcilerOption {
+func AdditionalChildResourcePatcher(op ...resource.ChildResourcePatcher) ConfigurationStackReconcilerOption {
 	return func(reconciler *ConfigurationStackReconciler) {
-		reconciler.preApplyOverride = resource.PreApplyOverriderChain(op)
+		reconciler.childResourcePatcher = append(reconciler.childResourcePatcher, op...)
+	}
+}
+
+func WithResourcePath(path string) ConfigurationStackReconcilerOption {
+	return func(reconciler *ConfigurationStackReconciler) {
+		reconciler.kustomizeOperation.ResourcePath = path
 	}
 }
 
@@ -71,11 +77,13 @@ func NewConfigurationStackReconciler(m manager.Manager, of schema.GroupVersionKi
 		newResource: nr,
 		shortWait:   defaultShortWait,
 		longWait:    defaultLongWait,
-		kustomizeOperation: operations.NewKustomizeOperation(defaultRootPath, resource.KustomizeOverriderChain{
-			&resource.NamePrefixer{},
-			&resource.LabelPropagator{},
+		kustomizeOperation: operations.NewKustomizeOperation(defaultRootPath, resource.KustomizationPatcherChain{
+			resource.NewNamePrefixer(),
+			resource.NewLabelPropagator(),
 		}),
-		preApplyOverride: &resource.OwnerReferenceOverrider{},
+		childResourcePatcher: resource.ChildResourcePatcherChain{
+			resource.NewOwnerReferenceAdder(),
+		},
 	}
 
 	for _, opt := range options {
@@ -85,19 +93,19 @@ func NewConfigurationStackReconciler(m manager.Manager, of schema.GroupVersionKi
 }
 
 type ConfigurationStackReconciler struct {
-	kube        client.Client
-	newResource func() resource.ParentResource
-	shortWait   time.Duration
-	longWait    time.Duration
+	kube         client.Client
+	newResource  func() resource.ParentResource
+	resourcePath string
+	shortWait    time.Duration
+	longWait     time.Duration
 
-	kustomizeOperation *operations.KustomizeOperation
-	preApplyOverride   resource.PreApplyOverrider
+	kustomizeOperation   *operations.KustomizeOperation
+	childResourcePatcher resource.ChildResourcePatcherChain
 }
 
 func (r *ConfigurationStackReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), reconcileTimeout)
 	defer cancel()
-	// TODO(muvaf): logging.
 	cr := r.newResource()
 	if err := r.kube.Get(ctx, req.NamespacedName, cr); err != nil {
 		// There's no need to requeue if we no longer exist. Otherwise we'll be
@@ -106,24 +114,27 @@ func (r *ConfigurationStackReconciler) Reconcile(req ctrl.Request) (ctrl.Result,
 	}
 
 	if meta.WasDeleted(cr) {
-		return reconcile.Result{}, nil
+		return reconcile.Result{Requeue: false}, nil
 	}
 
 	childResources, err := r.kustomizeOperation.RunKustomize(cr)
 	if err != nil {
 		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(err, "kustomize operation failed")
 	}
-	r.preApplyOverride.Override(cr, childResources)
+	childResources, err = r.childResourcePatcher.Patch(cr, childResources)
+	if err != nil {
+		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(err, "child resource patchers failed")
+	}
 	for _, o := range childResources {
-		if err := PatchResource(ctx, r.kube, o); err != nil {
-			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(err, "patch failed")
+		if err := Apply(ctx, r.kube, o); err != nil {
+			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(err, "apply failed")
 		}
 	}
 	cr.SetConditions(v1alpha1.ReconcileSuccess())
 	return ctrl.Result{RequeueAfter: r.longWait}, r.kube.Status().Update(ctx, cr)
 }
 
-func PatchResource(ctx context.Context, kube client.Client, o resource.ChildResource) error {
+func Apply(ctx context.Context, kube client.Client, o resource.ChildResource) error {
 	existing := o.DeepCopyObject().(resource.ChildResource)
 	err := kube.Get(ctx, types.NamespacedName{Name: o.GetName(), Namespace: o.GetNamespace()}, existing)
 	if kerrors.IsNotFound(err) {
