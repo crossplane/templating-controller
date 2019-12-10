@@ -27,10 +27,14 @@ import (
 	"github.com/crossplaneio/crossplane-runtime/pkg/meta"
 )
 
+// NewOwnerReferenceAdder returns a new *OwnerReferenceAdder
 func NewOwnerReferenceAdder() *OwnerReferenceAdder {
 	return &OwnerReferenceAdder{}
 }
 
+// OwnerReferenceAdder adds owner reference of ParentResource to all ChildResources
+// except the Providers since their deletion should be delayed until all resources
+// refer to them are deleted.
 type OwnerReferenceAdder struct{}
 
 func (lo *OwnerReferenceAdder) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
@@ -56,10 +60,13 @@ func (lo *OwnerReferenceAdder) Patch(cr ParentResource, list []ChildResource) ([
 	return list, nil
 }
 
+// NewNamePrefixer returns a new *NamePrefixer.
 func NewNamePrefixer() *NamePrefixer {
 	return &NamePrefixer{}
 }
 
+// NamePrefixer adds the name of the ParentResource as name prefix to be used
+// in Kustomize.
 type NamePrefixer struct{}
 
 func (np *NamePrefixer) Patch(cr ParentResource, k *types.Kustomization) error {
@@ -67,15 +74,37 @@ func (np *NamePrefixer) Patch(cr ParentResource, k *types.Kustomization) error {
 	return nil
 }
 
+// NewNamePrefixer returns a new *NamePrefixer.
+func NewNamespaceNamePrefixer() *NamespaceNamePrefixer {
+	return &NamespaceNamePrefixer{}
+}
+
+// NamePrefixer adds the name of the ParentResource as name prefix to be used
+// in Kustomize.
+type NamespaceNamePrefixer struct{}
+
+func (np *NamespaceNamePrefixer) Patch(cr ParentResource, k *types.Kustomization) error {
+	k.NamePrefix = fmt.Sprintf("%s-%s-", cr.GetNamespace(), cr.GetName())
+	return nil
+}
+
+// NewLabelPropagator returns a *LabelPropagator
 func NewLabelPropagator() *LabelPropagator {
 	return &LabelPropagator{}
 }
 
+// LabelPropagator copies all labels of ParentResource to commonLabels of
+// Kustomization object so that all rendered resources have those labels.
+// It also adds name, namespace(if exists) and uid of the parent resource to the
+// commonLabels property.
 type LabelPropagator struct{}
 
 func (la *LabelPropagator) Patch(cr ParentResource, k *types.Kustomization) error {
 	if k.CommonLabels == nil {
 		k.CommonLabels = map[string]string{}
+	}
+	if cr.GetNamespace() != "" {
+		k.CommonLabels[fmt.Sprintf("%s/namespace", cr.GetObjectKind().GroupVersionKind().Group)] = cr.GetName()
 	}
 	k.CommonLabels[fmt.Sprintf("%s/name", cr.GetObjectKind().GroupVersionKind().Group)] = cr.GetName()
 	k.CommonLabels[fmt.Sprintf("%s/uid", cr.GetObjectKind().GroupVersionKind().Group)] = string(cr.GetUID())

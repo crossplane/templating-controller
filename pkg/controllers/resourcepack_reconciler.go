@@ -16,6 +16,7 @@ limitations under the License.
 package controllers
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/pkg/errors"
@@ -40,43 +41,60 @@ const (
 	reconcileTimeout = 1 * time.Minute
 
 	defaultShortWait = 30 * time.Second
-	defaultLongWait  = 3 * time.Minute
+	defaultLongWait  = 1 * time.Minute
 
 	defaultRootPath = "resources"
 
-	errGetResource = "could not get the custom resource"
+	errGetResource           = "could not get the custom resource"
+	errKustomizeOperation    = "kustomize operation failed"
+	errChildResourcePatchers = "child resource patchers failed"
+	errApply                 = "apply failed"
+	errStatusPatch           = "status patch failed"
 )
 
-type ConfigurationStackReconcilerOption func(*ConfigurationStackReconciler)
+type ResurcePackReconcilerOption func(*ResurcePackReconciler)
 
-func AdditionalKustomizationPatcher(op ...resource.KustomizationPatcher) ConfigurationStackReconcilerOption {
-	return func(reconciler *ConfigurationStackReconciler) {
+func AdditionalKustomizationPatcher(op ...resource.KustomizationPatcher) ResurcePackReconcilerOption {
+	return func(reconciler *ResurcePackReconciler) {
 		reconciler.kustomizeOperation.Patcher = append(reconciler.kustomizeOperation.Patcher, op...)
 	}
 }
-func AdditionalChildResourcePatcher(op ...resource.ChildResourcePatcher) ConfigurationStackReconcilerOption {
-	return func(reconciler *ConfigurationStackReconciler) {
+func AdditionalChildResourcePatcher(op ...resource.ChildResourcePatcher) ResurcePackReconcilerOption {
+	return func(reconciler *ResurcePackReconciler) {
 		reconciler.childResourcePatcher = append(reconciler.childResourcePatcher, op...)
 	}
 }
 
-func WithResourcePath(path string) ConfigurationStackReconcilerOption {
-	return func(reconciler *ConfigurationStackReconciler) {
+func WithResourcePath(path string) ResurcePackReconcilerOption {
+	return func(reconciler *ResurcePackReconciler) {
 		reconciler.kustomizeOperation.ResourcePath = path
 	}
 }
 
-func NewConfigurationStackReconciler(m manager.Manager, of schema.GroupVersionKind, options ...ConfigurationStackReconcilerOption) *ConfigurationStackReconciler {
+func WithShortWait(d time.Duration) ResurcePackReconcilerOption {
+	return func(reconciler *ResurcePackReconciler) {
+		reconciler.shortWait = d
+	}
+}
+
+func WithLongWait(d time.Duration) ResurcePackReconcilerOption {
+	return func(reconciler *ResurcePackReconciler) {
+		reconciler.longWait = d
+	}
+}
+
+func NewResurcePackReconciler(m manager.Manager, of schema.GroupVersionKind, options ...ResurcePackReconcilerOption) *ResurcePackReconciler {
 	nr := func() resource.ParentResource {
 		return runtimeresource.MustCreateObject(schema.GroupVersionKind(of), m.GetScheme()).(resource.ParentResource)
 	}
+	// Early panic if the resource doesn't satisfy ParentResource interface.
 	_ = nr()
 
-	r := &ConfigurationStackReconciler{
-		kube:        m.GetClient(),
-		newResource: nr,
-		shortWait:   defaultShortWait,
-		longWait:    defaultLongWait,
+	r := &ResurcePackReconciler{
+		kube:              m.GetClient(),
+		newParentResource: nr,
+		shortWait:         defaultShortWait,
+		longWait:          defaultLongWait,
 		kustomizeOperation: operations.NewKustomizeOperation(defaultRootPath, resource.KustomizationPatcherChain{
 			resource.NewNamePrefixer(),
 			resource.NewLabelPropagator(),
@@ -92,48 +110,56 @@ func NewConfigurationStackReconciler(m manager.Manager, of schema.GroupVersionKi
 	return r
 }
 
-type ConfigurationStackReconciler struct {
-	kube         client.Client
-	newResource  func() resource.ParentResource
-	resourcePath string
-	shortWait    time.Duration
-	longWait     time.Duration
+type ResurcePackReconciler struct {
+	kube              client.Client
+	newParentResource func() resource.ParentResource
+	resourcePath      string
+	shortWait         time.Duration
+	longWait          time.Duration
 
 	kustomizeOperation   *operations.KustomizeOperation
 	childResourcePatcher resource.ChildResourcePatcherChain
 }
 
-func (r *ConfigurationStackReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *ResurcePackReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), reconcileTimeout)
 	defer cancel()
-	cr := r.newResource()
+
+	cr := r.newParentResource()
 	if err := r.kube.Get(ctx, req.NamespacedName, cr); err != nil {
-		// There's no need to requeue if we no longer exist. Otherwise we'll be
-		// requeued implicitly because we return an error.
-		return reconcile.Result{}, errors.Wrap(client.IgnoreNotFound(err), errGetResource)
+		// There's no need to requeue if the resource no longer exists. Otherwise
+		// we'll be requeued implicitly because we return an error.
+		return reconcile.Result{Requeue: false}, errors.Wrap(client.IgnoreNotFound(err), errGetResource)
 	}
 
 	if meta.WasDeleted(cr) {
+		// We have nothing to do as the child resources will be garbage collected
+		// by Kubernetes.
 		return reconcile.Result{Requeue: false}, nil
 	}
 
-	childResources, err := r.kustomizeOperation.RunKustomize(cr)
+	childResources, err := r.kustomizeOperation.Run(cr)
 	if err != nil {
-		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(err, "kustomize operation failed")
+		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(err, errKustomizeOperation)
 	}
+
 	childResources, err = r.childResourcePatcher.Patch(cr, childResources)
 	if err != nil {
-		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(err, "child resource patchers failed")
+		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(err, errChildResourcePatchers)
 	}
+
 	for _, o := range childResources {
 		if err := Apply(ctx, r.kube, o); err != nil {
-			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(err, "apply failed")
+			return ctrl.Result{RequeueAfter: r.shortWait},
+				errors.Wrap(err, fmt.Sprintf("%s: %s/%s of type %s", errApply, o.GetName(), o.GetNamespace(), o.GetObjectKind().GroupVersionKind().String()))
 		}
 	}
+
 	cr.SetConditions(v1alpha1.ReconcileSuccess())
-	return ctrl.Result{RequeueAfter: r.longWait}, r.kube.Status().Update(ctx, cr)
+	return ctrl.Result{RequeueAfter: r.longWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errStatusPatch)
 }
 
+// Apply creates if the object doesn't exist and patches if it does exists.
 func Apply(ctx context.Context, kube client.Client, o resource.ChildResource) error {
 	existing := o.DeepCopyObject().(resource.ChildResource)
 	err := kube.Get(ctx, types.NamespacedName{Name: o.GetName(), Namespace: o.GetNamespace()}, existing)
