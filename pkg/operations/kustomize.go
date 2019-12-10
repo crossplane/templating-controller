@@ -76,13 +76,17 @@ func (o *KustomizeOperation) Run(cr resource.ParentResource) ([]resource.ChildRe
 	}
 	var objects []resource.ChildResource
 	for _, res := range resMap.Resources() {
-		// ParentResource is written to kustomization directory only to be used
-		// for value retrieval.
-		if res.GetKind() == cr.GetObjectKind().GroupVersionKind().Kind {
+		u := &unstructured.Unstructured{}
+		// NOTE(muvaf): This is magic.
+		u.SetUnstructuredContent(res.Map())
+
+		// NOTE(muvaf): ParentResource is written to kustomization directory
+		// only to be used for value retrieval. We remove it from the render
+		// results here.
+		if u.GroupVersionKind() == cr.GetObjectKind().GroupVersionKind() {
 			continue
 		}
-		u := &unstructured.Unstructured{}
-		u.SetUnstructuredContent(res.Map())
+
 		objects = append(objects, u)
 	}
 
@@ -90,14 +94,15 @@ func (o *KustomizeOperation) Run(cr resource.ParentResource) ([]resource.ChildRe
 }
 
 func (o *KustomizeOperation) prepareOverlay(cr resource.ParentResource, k *kustomizeapi.Kustomization) (string, error) {
-	// Kustomize does not work with symlinked paths, so, we're using its own
-	// temp directory generation function.
+	// NOTE(muvaf): Kustomize does not work with symlinked paths, so, we're
+	// using their temp directory generation function instead of Golang's.
 	tempConfirmedDir, err := filesys.NewTmpConfirmedDir()
 	if err != nil {
 		return "", err
 	}
 	tempDir := string(tempConfirmedDir)
 	defer os.RemoveAll(string(tempDir))
+
 	crYAML, err := yaml.Marshal(cr)
 	if err != nil {
 		return "", err
@@ -106,8 +111,8 @@ func (o *KustomizeOperation) prepareOverlay(cr resource.ParentResource, k *kusto
 		return "", err
 	}
 
-	// Kustomize doesn't work with absolute paths, all paths have to be relative
-	// to the root path of the folder where kustomize points to.
+	// NOTE(muvaf): Kustomize doesn't work with absolute paths, all paths have
+	// to be relative to the root path of the folder where kustomize points to.
 	absPath, err := filepath.Abs(o.ResourcePath)
 	if err != nil {
 		return "", err

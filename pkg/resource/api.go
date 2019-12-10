@@ -28,8 +28,8 @@ import (
 )
 
 // NewOwnerReferenceAdder returns a new *OwnerReferenceAdder
-func NewOwnerReferenceAdder() *OwnerReferenceAdder {
-	return &OwnerReferenceAdder{}
+func NewOwnerReferenceAdder() OwnerReferenceAdder {
+	return OwnerReferenceAdder{}
 }
 
 // OwnerReferenceAdder adds owner reference of ParentResource to all ChildResources
@@ -37,7 +37,7 @@ func NewOwnerReferenceAdder() *OwnerReferenceAdder {
 // refer to them are deleted.
 type OwnerReferenceAdder struct{}
 
-func (lo *OwnerReferenceAdder) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
+func (lo OwnerReferenceAdder) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
 	ref := metav1.OwnerReference{
 		APIVersion: cr.GetObjectKind().GroupVersionKind().GroupVersion().String(),
 		Kind:       cr.GetObjectKind().GroupVersionKind().Kind,
@@ -61,36 +61,36 @@ func (lo *OwnerReferenceAdder) Patch(cr ParentResource, list []ChildResource) ([
 }
 
 // NewNamePrefixer returns a new *NamePrefixer.
-func NewNamePrefixer() *NamePrefixer {
-	return &NamePrefixer{}
+func NewNamePrefixer() NamePrefixer {
+	return NamePrefixer{}
 }
 
 // NamePrefixer adds the name of the ParentResource as name prefix to be used
 // in Kustomize.
 type NamePrefixer struct{}
 
-func (np *NamePrefixer) Patch(cr ParentResource, k *types.Kustomization) error {
+func (np NamePrefixer) Patch(cr ParentResource, k *types.Kustomization) error {
 	k.NamePrefix = fmt.Sprintf("%s-", cr.GetName())
 	return nil
 }
 
 // NewNamePrefixer returns a new *NamePrefixer.
-func NewNamespaceNamePrefixer() *NamespaceNamePrefixer {
-	return &NamespaceNamePrefixer{}
+func NewNamespaceNamePrefixer() NamespaceNamePrefixer {
+	return NamespaceNamePrefixer{}
 }
 
 // NamePrefixer adds the name of the ParentResource as name prefix to be used
 // in Kustomize.
 type NamespaceNamePrefixer struct{}
 
-func (np *NamespaceNamePrefixer) Patch(cr ParentResource, k *types.Kustomization) error {
+func (np NamespaceNamePrefixer) Patch(cr ParentResource, k *types.Kustomization) error {
 	k.NamePrefix = fmt.Sprintf("%s-%s-", cr.GetNamespace(), cr.GetName())
 	return nil
 }
 
 // NewLabelPropagator returns a *LabelPropagator
-func NewLabelPropagator() *LabelPropagator {
-	return &LabelPropagator{}
+func NewLabelPropagator() LabelPropagator {
+	return LabelPropagator{}
 }
 
 // LabelPropagator copies all labels of ParentResource to commonLabels of
@@ -99,7 +99,7 @@ func NewLabelPropagator() *LabelPropagator {
 // commonLabels property.
 type LabelPropagator struct{}
 
-func (la *LabelPropagator) Patch(cr ParentResource, k *types.Kustomization) error {
+func (la LabelPropagator) Patch(cr ParentResource, k *types.Kustomization) error {
 	if k.CommonLabels == nil {
 		k.CommonLabels = map[string]string{}
 	}

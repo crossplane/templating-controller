@@ -45,11 +45,11 @@ const (
 
 	defaultRootPath = "resources"
 
+	errUpdateResourceStatus  = "could not update status of the custom resource"
 	errGetResource           = "could not get the custom resource"
 	errKustomizeOperation    = "kustomize operation failed"
 	errChildResourcePatchers = "child resource patchers failed"
 	errApply                 = "apply failed"
-	errStatusPatch           = "status patch failed"
 )
 
 type ResurcePackReconcilerOption func(*ResurcePackReconciler)
@@ -140,23 +140,25 @@ func (r *ResurcePackReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error)
 
 	childResources, err := r.kustomizeOperation.Run(cr)
 	if err != nil {
-		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(err, errKustomizeOperation)
+		cr.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errKustomizeOperation)))
+		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 
 	childResources, err = r.childResourcePatcher.Patch(cr, childResources)
 	if err != nil {
-		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(err, errChildResourcePatchers)
+		cr.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errChildResourcePatchers)))
+		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 
 	for _, o := range childResources {
 		if err := Apply(ctx, r.kube, o); err != nil {
-			return ctrl.Result{RequeueAfter: r.shortWait},
-				errors.Wrap(err, fmt.Sprintf("%s: %s/%s of type %s", errApply, o.GetName(), o.GetNamespace(), o.GetObjectKind().GroupVersionKind().String()))
+			cr.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, fmt.Sprintf("%s: %s/%s of type %s", errApply, o.GetName(), o.GetNamespace(), o.GetObjectKind().GroupVersionKind().String()))))
+			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 		}
 	}
 
 	cr.SetConditions(v1alpha1.ReconcileSuccess())
-	return ctrl.Result{RequeueAfter: r.longWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errStatusPatch)
+	return ctrl.Result{RequeueAfter: r.longWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 }
 
 // Apply creates if the object doesn't exist and patches if it does exists.
