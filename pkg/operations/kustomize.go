@@ -61,7 +61,14 @@ type KustomizeOperation struct {
 }
 
 func (o *KustomizeOperation) Run(cr resource.ParentResource) ([]resource.ChildResource, error) {
+	tmpl, err := ioutil.ReadFile(fmt.Sprintf("%s/kustomization.yaml.tmpl", o.ResourcePath))
+	if err != nil {
+		return nil, err
+	}
 	k := &kustomizeapi.Kustomization{}
+	if err := yaml.Unmarshal(tmpl, k); err != nil {
+		return nil, err
+	}
 	if err := o.Patcher.Patch(cr, k); err != nil {
 		return nil, errors.Wrap(err, errPatch)
 	}

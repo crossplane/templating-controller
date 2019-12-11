@@ -98,6 +98,7 @@ func NewResurcePackReconciler(m manager.Manager, of schema.GroupVersionKind, opt
 		kustomizeOperation: operations.NewKustomizeOperation(defaultRootPath, resource.KustomizationPatcherChain{
 			resource.NewNamePrefixer(),
 			resource.NewLabelPropagator(),
+			resource.NewVarReferenceFiller(),
 		}),
 		childResourcePatcher: resource.ChildResourcePatcherChain{
 			resource.NewOwnerReferenceAdder(),

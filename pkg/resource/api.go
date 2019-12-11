@@ -20,6 +20,10 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	"sigs.k8s.io/kustomize/api/resid"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/kustomize/api/types"
@@ -58,6 +62,37 @@ func (lo OwnerReferenceAdder) Patch(cr ParentResource, list []ChildResource) ([]
 		meta.AddOwnerReference(o, ref)
 	}
 	return list, nil
+}
+
+// NewNamePrefixer returns a new *NamePrefixer.
+func NewVarReferenceFiller() VariantFiller {
+	return VariantFiller{}
+}
+
+func isSame(a schema.GroupVersionKind, b resid.Gvk) bool {
+	if a.Group != b.Group || a.Version != b.Version || a.Kind != b.Kind {
+		return false
+	}
+	return true
+}
+
+// VariantFiller fills the Variants that refer to the ParentResource with the
+// correct name and namespace.
+type VariantFiller struct{}
+
+func (np VariantFiller) Patch(cr ParentResource, k *types.Kustomization) error {
+	if len(k.Vars) == 0 {
+		return nil
+	}
+	newVars := k.Vars
+	for _, varRef := range newVars {
+		if isSame(cr.GetObjectKind().GroupVersionKind(), varRef.ObjRef.GVK()) {
+			varRef.ObjRef.Name = cr.GetName()
+			varRef.ObjRef.Namespace = cr.GetNamespace()
+		}
+	}
+	k.Vars = newVars
+	return nil
 }
 
 // NewNamePrefixer returns a new *NamePrefixer.
