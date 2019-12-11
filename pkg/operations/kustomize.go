@@ -34,6 +34,9 @@ import (
 )
 
 const (
+	templateFileName      = "kustomization.yaml.tmpl"
+	kustomizationFileName = "kustomization.yaml"
+
 	errPatch              = "patch call of KustomizationPatcher failed"
 	errOverlayPreparation = "overlay preparation failed"
 	errKustomizationCall  = "kustomization call failed"
@@ -61,7 +64,7 @@ type KustomizeOperation struct {
 }
 
 func (o *KustomizeOperation) Run(cr resource.ParentResource) ([]resource.ChildResource, error) {
-	tmpl, err := ioutil.ReadFile(fmt.Sprintf("%s/kustomization.yaml.tmpl", o.ResourcePath))
+	tmpl, err := ioutil.ReadFile(fmt.Sprintf("%s/%s", o.ResourcePath, templateFileName))
 	if err != nil {
 		return nil, err
 	}
@@ -73,6 +76,7 @@ func (o *KustomizeOperation) Run(cr resource.ParentResource) ([]resource.ChildRe
 		return nil, errors.Wrap(err, errPatch)
 	}
 	dir, err := o.prepareOverlay(cr, k)
+	defer os.RemoveAll(dir)
 	if err != nil {
 		return nil, errors.Wrap(err, errOverlayPreparation)
 	}
@@ -108,7 +112,6 @@ func (o *KustomizeOperation) prepareOverlay(cr resource.ParentResource, k *kusto
 		return "", err
 	}
 	tempDir := string(tempConfirmedDir)
-	defer os.RemoveAll(string(tempDir))
 
 	crYAML, err := yaml.Marshal(cr)
 	if err != nil {
@@ -133,7 +136,7 @@ func (o *KustomizeOperation) prepareOverlay(cr resource.ParentResource, k *kusto
 	if err != nil {
 		return "", err
 	}
-	if err := ioutil.WriteFile(fmt.Sprintf("%s/kustomization.yaml", tempDir), yamlData, os.ModePerm); err != nil {
+	if err := ioutil.WriteFile(fmt.Sprintf("%s/%s", tempDir, kustomizationFileName), yamlData, os.ModePerm); err != nil {
 		return "", err
 	}
 	return tempDir, nil

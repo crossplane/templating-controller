@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/crossplaneio/crossplane-runtime/apis/core/v1alpha1"
+
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"sigs.k8s.io/kustomize/api/resid"
@@ -30,6 +32,9 @@ import (
 
 	"github.com/crossplaneio/crossplane-runtime/pkg/meta"
 )
+
+const KeepDefaultAnnotationsKey = "resourcepacks.crossplane.io/keep-defaulting-annotations"
+const KeepDefaultAnnotationsTrueValue = "true"
 
 // NewOwnerReferenceAdder returns a new *OwnerReferenceAdder
 func NewOwnerReferenceAdder() OwnerReferenceAdder {
@@ -64,16 +69,36 @@ func (lo OwnerReferenceAdder) Patch(cr ParentResource, list []ChildResource) ([]
 	return list, nil
 }
 
+// NewDefaultingAnnotationRemover returns a new DefaultingAnnotationRemover
+func NewDefaultingAnnotationRemover() DefaultingAnnotationRemover {
+	return DefaultingAnnotationRemover{}
+}
+
+// DefaultingAnnotationRemover removes the defaulting annotation on the resources
+// if not explicitly specified otherwise.
+type DefaultingAnnotationRemover struct{}
+
+func (lo DefaultingAnnotationRemover) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
+	if cr.GetAnnotations()[KeepDefaultAnnotationsKey] == KeepDefaultAnnotationsTrueValue {
+		return list, nil
+	}
+	for _, o := range list {
+		meta.RemoveAnnotations(o, v1alpha1.AnnotationDefaultClassKey)
+	}
+	return list, nil
+}
+
 // NewNamePrefixer returns a new *NamePrefixer.
 func NewVarReferenceFiller() VariantFiller {
 	return VariantFiller{}
 }
 
-func isSame(a schema.GroupVersionKind, b resid.Gvk) bool {
-	if a.Group != b.Group || a.Version != b.Version || a.Kind != b.Kind {
-		return false
+func getSchemaGVK(gvk resid.Gvk) schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   gvk.Group,
+		Version: gvk.Version,
+		Kind:    gvk.Kind,
 	}
-	return true
 }
 
 // VariantFiller fills the Variants that refer to the ParentResource with the
@@ -84,14 +109,12 @@ func (np VariantFiller) Patch(cr ParentResource, k *types.Kustomization) error {
 	if len(k.Vars) == 0 {
 		return nil
 	}
-	newVars := k.Vars
-	for _, varRef := range newVars {
-		if isSame(cr.GetObjectKind().GroupVersionKind(), varRef.ObjRef.GVK()) {
-			varRef.ObjRef.Name = cr.GetName()
-			varRef.ObjRef.Namespace = cr.GetNamespace()
+	for i, varRef := range k.Vars {
+		if cr.GetObjectKind().GroupVersionKind() == getSchemaGVK(varRef.ObjRef.GVK()) {
+			k.Vars[i].ObjRef.Name = cr.GetName()
+			k.Vars[i].ObjRef.Namespace = cr.GetNamespace()
 		}
 	}
-	k.Vars = newVars
 	return nil
 }
 

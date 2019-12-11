@@ -101,6 +101,7 @@ func NewResurcePackReconciler(m manager.Manager, of schema.GroupVersionKind, opt
 			resource.NewVarReferenceFiller(),
 		}),
 		childResourcePatcher: resource.ChildResourcePatcherChain{
+			resource.NewDefaultingAnnotationRemover(),
 			resource.NewOwnerReferenceAdder(),
 		},
 	}
