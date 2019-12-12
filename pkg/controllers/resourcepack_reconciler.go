@@ -33,7 +33,7 @@ import (
 	"github.com/crossplaneio/crossplane-runtime/pkg/meta"
 	runtimeresource "github.com/crossplaneio/crossplane-runtime/pkg/resource"
 
-	"github.com/muvaf/configuration-stacks/pkg/operations"
+	"github.com/muvaf/configuration-stacks/pkg/operations/kustomize"
 	"github.com/muvaf/configuration-stacks/pkg/resource"
 )
 
@@ -43,31 +43,24 @@ const (
 	defaultShortWait = 30 * time.Second
 	defaultLongWait  = 1 * time.Minute
 
-	defaultRootPath = "resources"
-
 	errUpdateResourceStatus  = "could not update status of the custom resource"
 	errGetResource           = "could not get the custom resource"
-	errKustomizeOperation    = "kustomize operation failed"
+	errTemplatingOperation   = "templating operation failed"
 	errChildResourcePatchers = "child resource patchers failed"
 	errApply                 = "apply failed"
 )
 
 type ResurcePackReconcilerOption func(*ResurcePackReconciler)
 
-func AdditionalKustomizationPatcher(op ...resource.KustomizationPatcher) ResurcePackReconcilerOption {
-	return func(reconciler *ResurcePackReconciler) {
-		reconciler.kustomizeOperation.Patcher = append(reconciler.kustomizeOperation.Patcher, op...)
-	}
-}
 func AdditionalChildResourcePatcher(op ...resource.ChildResourcePatcher) ResurcePackReconcilerOption {
 	return func(reconciler *ResurcePackReconciler) {
 		reconciler.childResourcePatcher = append(reconciler.childResourcePatcher, op...)
 	}
 }
 
-func WithResourcePath(path string) ResurcePackReconcilerOption {
+func WithTemplatingEngine(eng resource.TemplatingEngine) ResurcePackReconcilerOption {
 	return func(reconciler *ResurcePackReconciler) {
-		reconciler.kustomizeOperation.ResourcePath = path
+		reconciler.templatingEngine = eng
 	}
 }
 
@@ -95,11 +88,10 @@ func NewResurcePackReconciler(m manager.Manager, of schema.GroupVersionKind, opt
 		newParentResource: nr,
 		shortWait:         defaultShortWait,
 		longWait:          defaultLongWait,
-		kustomizeOperation: operations.NewKustomizeOperation(defaultRootPath, resource.KustomizationPatcherChain{
-			resource.NewNamePrefixer(),
-			resource.NewLabelPropagator(),
-			resource.NewVarReferenceFiller(),
-		}),
+		templatingEngine: kustomize.NewKustomizeEngine(kustomize.AdditionalKustomizationPatcher(
+			kustomize.NewNamePrefixer(),
+			kustomize.NewLabelPropagator(),
+			kustomize.NewVarReferenceFiller())),
 		childResourcePatcher: resource.ChildResourcePatcherChain{
 			resource.NewDefaultingAnnotationRemover(),
 			resource.NewOwnerReferenceAdder(),
@@ -119,7 +111,7 @@ type ResurcePackReconciler struct {
 	shortWait         time.Duration
 	longWait          time.Duration
 
-	kustomizeOperation   *operations.KustomizeOperation
+	templatingEngine     resource.TemplatingEngine
 	childResourcePatcher resource.ChildResourcePatcherChain
 }
 
@@ -140,9 +132,9 @@ func (r *ResurcePackReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error)
 		return reconcile.Result{Requeue: false}, nil
 	}
 
-	childResources, err := r.kustomizeOperation.Run(cr)
+	childResources, err := r.templatingEngine.Run(cr)
 	if err != nil {
-		cr.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errKustomizeOperation)))
+		cr.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errTemplatingOperation)))
 		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 

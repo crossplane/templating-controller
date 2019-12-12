@@ -17,11 +17,9 @@ limitations under the License.
 package resource
 
 import (
+	"github.com/crossplaneio/crossplane-runtime/pkg/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/kustomize/api/types"
-
-	"github.com/crossplaneio/crossplane-runtime/pkg/resource"
 )
 
 // ParentResource should be satisfied by the stack CRD that would like to use
@@ -40,37 +38,14 @@ type ChildResource interface {
 	metav1.Object
 }
 
-// A KustomizationPatcher is used to make modifications on Kustomization overlay
-// object before the render.
-type KustomizationPatcher interface {
-	Patch(ParentResource, *types.Kustomization) error
+type TemplatingEngine interface {
+	Run(ParentResource) ([]ChildResource, error)
 }
 
-// A ChildResourcePatcher is used to make modifications to the resources rendered
-// by the overlay Kustomization.
+// ChildResourcePatcher operates on the resources rendered by the templating
+// engine.
 type ChildResourcePatcher interface {
 	Patch(ParentResource, []ChildResource) ([]ChildResource, error)
-}
-
-// KustomizationPatcherFunc makes it easier to provide only a function as
-// KustomizationPatcher
-type KustomizationPatcherFunc func(ParentResource, *types.Kustomization) error
-
-func (kof KustomizationPatcherFunc) Patch(cr ParentResource, k *types.Kustomization) error {
-	return kof(cr, k)
-}
-
-// KustomizationPatcherChain makes it easier to provide a list of KustomizationPatcher
-// to be called in order.
-type KustomizationPatcherChain []KustomizationPatcher
-
-func (koc KustomizationPatcherChain) Patch(cr ParentResource, k *types.Kustomization) error {
-	for _, f := range koc {
-		if err := f.Patch(cr, k); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // ChildResourcePatcherFunc makes it easier to provide only a function as

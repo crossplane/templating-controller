@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package operations
+package kustomize
 
 import (
 	"fmt"
@@ -34,36 +34,60 @@ import (
 )
 
 const (
+	defaultRootPath       = "resources"
 	templateFileName      = "kustomization.yaml.tmpl"
 	kustomizationFileName = "kustomization.yaml"
 
-	errPatch              = "patch call of KustomizationPatcher failed"
+	errPatch              = "patch call failed"
 	errOverlayPreparation = "overlay preparation failed"
-	errKustomizationCall  = "kustomization call failed"
+	errKustomizeCall      = "kustomize call failed"
 )
 
-// NewKustomizeOperation returns a KustomizeOperation object. rootPath should
-// point to the folder where your base kustomization.yaml resides and patcher
-// is the chain of KustomizationPatcher that makes modifications of Kustomization
-// object.
-func NewKustomizeOperation(rootPath string, patcher resource.KustomizationPatcherChain) *KustomizeOperation {
-	return &KustomizeOperation{
-		ResourcePath: rootPath,
-		Patcher:      patcher,
+// KustomizeOption is used to manipulate default KustomizeEngine parameters.
+type KustomizeOption func(*KustomizeEngine)
+
+// WithResourcePath allows you to specify a kustomization folder other than default.
+func WithResourcePath(path string) KustomizeOption {
+	return func(ko *KustomizeEngine) {
+		ko.ResourcePath = path
 	}
 }
 
-type KustomizeOperation struct {
+// AdditionalKustomizationPatcher allows you to append KustomizationPatcher objects
+// to the patch pipeline.
+func AdditionalKustomizationPatcher(op ...KustomizationPatcher) KustomizeOption {
+	return func(ko *KustomizeEngine) {
+		ko.Patcher = append(ko.Patcher, op...)
+	}
+}
+
+// NewKustomizeEngine returns a KustomizeEngine object. rootPath should
+// point to the folder where your base kustomization.yaml resides and patcher
+// is the chain of KustomizationPatcher that makes modifications of Kustomization
+// object.
+func NewKustomizeEngine(opt ...KustomizeOption) *KustomizeEngine {
+	ko := &KustomizeEngine{
+		ResourcePath: defaultRootPath,
+	}
+
+	for _, f := range opt {
+		f(ko)
+	}
+
+	return ko
+}
+
+type KustomizeEngine struct {
 	// ResourcePath is the folder that the base resources reside in the
 	// filesystem. It should be given as absolute path.
 	ResourcePath string
 
 	// Patcher contains the modifications that you'd like to make to
 	// the overlay Kustomization object before calling kustomize.
-	Patcher resource.KustomizationPatcherChain
+	Patcher KustomizationPatcherChain
 }
 
-func (o *KustomizeOperation) Run(cr resource.ParentResource) ([]resource.ChildResource, error) {
+func (o *KustomizeEngine) Run(cr resource.ParentResource) ([]resource.ChildResource, error) {
 	tmpl, err := ioutil.ReadFile(fmt.Sprintf("%s/%s", o.ResourcePath, templateFileName))
 	if err != nil {
 		return nil, err
@@ -83,7 +107,7 @@ func (o *KustomizeOperation) Run(cr resource.ParentResource) ([]resource.ChildRe
 	kustomizer := krusty.MakeKustomizer(filesys.MakeFsOnDisk(), krusty.MakeDefaultOptions())
 	resMap, err := kustomizer.Run(dir)
 	if err != nil {
-		return nil, errors.Wrap(err, errKustomizationCall)
+		return nil, errors.Wrap(err, errKustomizeCall)
 	}
 	var objects []resource.ChildResource
 	for _, res := range resMap.Resources() {
@@ -104,9 +128,10 @@ func (o *KustomizeOperation) Run(cr resource.ParentResource) ([]resource.ChildRe
 	return objects, nil
 }
 
-func (o *KustomizeOperation) prepareOverlay(cr resource.ParentResource, k *kustomizeapi.Kustomization) (string, error) {
+func (o *KustomizeEngine) prepareOverlay(cr resource.ParentResource, k *kustomizeapi.Kustomization) (string, error) {
 	// NOTE(muvaf): Kustomize does not work with symlinked paths, so, we're
-	// using their temp directory generation function instead of Golang's.
+	// using their temp directory generation function that handles this instead
+	// of Golang's.
 	tempConfirmedDir, err := filesys.NewTmpConfirmedDir()
 	if err != nil {
 		return "", err
@@ -122,7 +147,8 @@ func (o *KustomizeOperation) prepareOverlay(cr resource.ParentResource, k *kusto
 	}
 
 	// NOTE(muvaf): Kustomize doesn't work with absolute paths, all paths have
-	// to be relative to the root path of the folder where kustomize points to.
+	// to be relative to the root path of the folder where kustomize points to,
+	// which is the temporary directory we created.
 	absPath, err := filepath.Abs(o.ResourcePath)
 	if err != nil {
 		return "", err

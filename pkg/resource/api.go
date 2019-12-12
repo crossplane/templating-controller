@@ -17,19 +17,12 @@ limitations under the License.
 package resource
 
 import (
-	"fmt"
 	"strings"
-
-	"github.com/crossplaneio/crossplane-runtime/apis/core/v1alpha1"
-
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
-	"sigs.k8s.io/kustomize/api/resid"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/kustomize/api/types"
 
+	"github.com/crossplaneio/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplaneio/crossplane-runtime/pkg/meta"
 )
 
@@ -86,90 +79,6 @@ func (lo DefaultingAnnotationRemover) Patch(cr ParentResource, list []ChildResou
 		meta.RemoveAnnotations(o, v1alpha1.AnnotationDefaultClassKey)
 	}
 	return list, nil
-}
-
-// NewNamePrefixer returns a new *NamePrefixer.
-func NewVarReferenceFiller() VariantFiller {
-	return VariantFiller{}
-}
-
-func getSchemaGVK(gvk resid.Gvk) schema.GroupVersionKind {
-	return schema.GroupVersionKind{
-		Group:   gvk.Group,
-		Version: gvk.Version,
-		Kind:    gvk.Kind,
-	}
-}
-
-// VariantFiller fills the Variants that refer to the ParentResource with the
-// correct name and namespace.
-type VariantFiller struct{}
-
-func (np VariantFiller) Patch(cr ParentResource, k *types.Kustomization) error {
-	if len(k.Vars) == 0 {
-		return nil
-	}
-	for i, varRef := range k.Vars {
-		if cr.GetObjectKind().GroupVersionKind() == getSchemaGVK(varRef.ObjRef.GVK()) {
-			k.Vars[i].ObjRef.Name = cr.GetName()
-			k.Vars[i].ObjRef.Namespace = cr.GetNamespace()
-		}
-	}
-	return nil
-}
-
-// NewNamePrefixer returns a new *NamePrefixer.
-func NewNamePrefixer() NamePrefixer {
-	return NamePrefixer{}
-}
-
-// NamePrefixer adds the name of the ParentResource as name prefix to be used
-// in Kustomize.
-type NamePrefixer struct{}
-
-func (np NamePrefixer) Patch(cr ParentResource, k *types.Kustomization) error {
-	k.NamePrefix = fmt.Sprintf("%s-", cr.GetName())
-	return nil
-}
-
-// NewNamePrefixer returns a new *NamePrefixer.
-func NewNamespaceNamePrefixer() NamespaceNamePrefixer {
-	return NamespaceNamePrefixer{}
-}
-
-// NamePrefixer adds the name of the ParentResource as name prefix to be used
-// in Kustomize.
-type NamespaceNamePrefixer struct{}
-
-func (np NamespaceNamePrefixer) Patch(cr ParentResource, k *types.Kustomization) error {
-	k.NamePrefix = fmt.Sprintf("%s-%s-", cr.GetNamespace(), cr.GetName())
-	return nil
-}
-
-// NewLabelPropagator returns a *LabelPropagator
-func NewLabelPropagator() LabelPropagator {
-	return LabelPropagator{}
-}
-
-// LabelPropagator copies all labels of ParentResource to commonLabels of
-// Kustomization object so that all rendered resources have those labels.
-// It also adds name, namespace(if exists) and uid of the parent resource to the
-// commonLabels property.
-type LabelPropagator struct{}
-
-func (la LabelPropagator) Patch(cr ParentResource, k *types.Kustomization) error {
-	if k.CommonLabels == nil {
-		k.CommonLabels = map[string]string{}
-	}
-	if cr.GetNamespace() != "" {
-		k.CommonLabels[fmt.Sprintf("%s/namespace", cr.GetObjectKind().GroupVersionKind().Group)] = cr.GetName()
-	}
-	k.CommonLabels[fmt.Sprintf("%s/name", cr.GetObjectKind().GroupVersionKind().Group)] = cr.GetName()
-	k.CommonLabels[fmt.Sprintf("%s/uid", cr.GetObjectKind().GroupVersionKind().Group)] = string(cr.GetUID())
-	for key, val := range cr.GetLabels() {
-		k.CommonLabels[key] = val
-	}
-	return nil
 }
 
 // todo: temp until Provider interface lands on crossplane-runtime.
