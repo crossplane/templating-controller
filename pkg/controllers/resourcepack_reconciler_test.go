@@ -29,8 +29,8 @@ import (
 	runtimefake "github.com/crossplaneio/crossplane-runtime/pkg/resource/fake"
 	"github.com/crossplaneio/crossplane-runtime/pkg/test"
 
-	"github.com/muvaf/configuration-stacks/pkg/resource"
-	"github.com/muvaf/configuration-stacks/pkg/resource/fake"
+	"github.com/muvaf/crossplane-resourcepacks/pkg/resource"
+	"github.com/muvaf/crossplane-resourcepacks/pkg/resource/fake"
 )
 
 type MockParentResourceOption func(*fake.MockParentResource)

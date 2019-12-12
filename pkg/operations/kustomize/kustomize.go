@@ -30,7 +30,7 @@ import (
 	kustomizeapi "sigs.k8s.io/kustomize/api/types"
 	"sigs.k8s.io/yaml"
 
-	"github.com/muvaf/configuration-stacks/pkg/resource"
+	"github.com/muvaf/crossplane-resourcepacks/pkg/resource"
 )
 
 const (

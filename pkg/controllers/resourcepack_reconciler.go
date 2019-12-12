@@ -33,8 +33,8 @@ import (
 	"github.com/crossplaneio/crossplane-runtime/pkg/meta"
 	runtimeresource "github.com/crossplaneio/crossplane-runtime/pkg/resource"
 
-	"github.com/muvaf/configuration-stacks/pkg/operations/kustomize"
-	"github.com/muvaf/configuration-stacks/pkg/resource"
+	"github.com/muvaf/crossplane-resourcepacks/pkg/operations/kustomize"
+	"github.com/muvaf/crossplane-resourcepacks/pkg/resource"
 )
 
 const (

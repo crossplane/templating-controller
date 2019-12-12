@@ -1,4 +1,4 @@
-module github.com/muvaf/configuration-stacks
+module github.com/muvaf/crossplane-resourcepacks
 
 go 1.13
 
