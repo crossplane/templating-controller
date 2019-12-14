@@ -17,7 +17,6 @@ limitations under the License.
 package kustomize
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -37,6 +36,7 @@ const (
 	defaultRootPath       = "resources"
 	templateFileName      = "kustomization.yaml.tmpl"
 	kustomizationFileName = "kustomization.yaml"
+	temporaryCRFileName   = "cr.yaml"
 
 	errPatch              = "patch call failed"
 	errOverlayPreparation = "overlay preparation failed"
@@ -68,6 +68,11 @@ func AdditionalKustomizationPatcher(op ...KustomizationPatcher) KustomizeOption 
 func NewKustomizeEngine(opt ...KustomizeOption) *KustomizeEngine {
 	ko := &KustomizeEngine{
 		ResourcePath: defaultRootPath,
+		Patcher: KustomizationPatcherChain{
+			NewNamePrefixer(),
+			NewLabelPropagator(),
+			NewVarReferenceFiller(),
+		},
 	}
 
 	for _, f := range opt {
@@ -88,7 +93,7 @@ type KustomizeEngine struct {
 }
 
 func (o *KustomizeEngine) Run(cr resource.ParentResource) ([]resource.ChildResource, error) {
-	tmpl, err := ioutil.ReadFile(fmt.Sprintf("%s/%s", o.ResourcePath, templateFileName))
+	tmpl, err := ioutil.ReadFile(filepath.Join(o.ResourcePath, templateFileName))
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +147,7 @@ func (o *KustomizeEngine) prepareOverlay(cr resource.ParentResource, k *kustomiz
 	if err != nil {
 		return "", err
 	}
-	if err := ioutil.WriteFile(fmt.Sprintf("%s/cr.yaml", tempDir), crYAML, os.ModePerm); err != nil {
+	if err := ioutil.WriteFile(filepath.Join(tempDir, temporaryCRFileName), crYAML, os.ModePerm); err != nil {
 		return "", err
 	}
 
@@ -157,12 +162,12 @@ func (o *KustomizeEngine) prepareOverlay(cr resource.ParentResource, k *kustomiz
 	if err != nil {
 		return "", err
 	}
-	k.Resources = append(k.Resources, []string{relPath, "cr.yaml"}...)
+	k.Resources = append(k.Resources, []string{relPath, temporaryCRFileName}...)
 	yamlData, err := yaml.Marshal(k)
 	if err != nil {
 		return "", err
 	}
-	if err := ioutil.WriteFile(fmt.Sprintf("%s/%s", tempDir, kustomizationFileName), yamlData, os.ModePerm); err != nil {
+	if err := ioutil.WriteFile(filepath.Join(tempDir, kustomizationFileName), yamlData, os.ModePerm); err != nil {
 		return "", err
 	}
 	return tempDir, nil

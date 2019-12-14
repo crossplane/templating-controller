@@ -82,7 +82,7 @@ func TestReconcile(t *testing.T) {
 				Client: tc.kube,
 				Scheme: runtimefake.MockSchemeWith(&fake.MockParentResource{}),
 			}
-			r := NewResurcePackReconciler(mgr, runtimefake.MockGVK(&fake.MockParentResource{}))
+			r := NewResourcePackReconciler(mgr, runtimefake.MockGVK(&fake.MockParentResource{}))
 			_, err := r.Reconcile(reconcile.Request{})
 
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {

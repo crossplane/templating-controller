@@ -50,48 +50,45 @@ const (
 	errApply                 = "apply failed"
 )
 
-type ResurcePackReconcilerOption func(*ResurcePackReconciler)
+type ResourcePackReconcilerOption func(*ResourcePackReconciler)
 
-func AdditionalChildResourcePatcher(op ...resource.ChildResourcePatcher) ResurcePackReconcilerOption {
-	return func(reconciler *ResurcePackReconciler) {
+func AdditionalChildResourcePatcher(op ...resource.ChildResourcePatcher) ResourcePackReconcilerOption {
+	return func(reconciler *ResourcePackReconciler) {
 		reconciler.childResourcePatcher = append(reconciler.childResourcePatcher, op...)
 	}
 }
 
-func WithTemplatingEngine(eng resource.TemplatingEngine) ResurcePackReconcilerOption {
-	return func(reconciler *ResurcePackReconciler) {
+func WithTemplatingEngine(eng resource.TemplatingEngine) ResourcePackReconcilerOption {
+	return func(reconciler *ResourcePackReconciler) {
 		reconciler.templatingEngine = eng
 	}
 }
 
-func WithShortWait(d time.Duration) ResurcePackReconcilerOption {
-	return func(reconciler *ResurcePackReconciler) {
+func WithShortWait(d time.Duration) ResourcePackReconcilerOption {
+	return func(reconciler *ResourcePackReconciler) {
 		reconciler.shortWait = d
 	}
 }
 
-func WithLongWait(d time.Duration) ResurcePackReconcilerOption {
-	return func(reconciler *ResurcePackReconciler) {
+func WithLongWait(d time.Duration) ResourcePackReconcilerOption {
+	return func(reconciler *ResourcePackReconciler) {
 		reconciler.longWait = d
 	}
 }
 
-func NewResurcePackReconciler(m manager.Manager, of schema.GroupVersionKind, options ...ResurcePackReconcilerOption) *ResurcePackReconciler {
+func NewResourcePackReconciler(m manager.Manager, of schema.GroupVersionKind, options ...ResourcePackReconcilerOption) *ResourcePackReconciler {
 	nr := func() resource.ParentResource {
 		return runtimeresource.MustCreateObject(schema.GroupVersionKind(of), m.GetScheme()).(resource.ParentResource)
 	}
 	// Early panic if the resource doesn't satisfy ParentResource interface.
 	_ = nr()
 
-	r := &ResurcePackReconciler{
+	r := &ResourcePackReconciler{
 		kube:              m.GetClient(),
 		newParentResource: nr,
 		shortWait:         defaultShortWait,
 		longWait:          defaultLongWait,
-		templatingEngine: kustomize.NewKustomizeEngine(kustomize.AdditionalKustomizationPatcher(
-			kustomize.NewNamePrefixer(),
-			kustomize.NewLabelPropagator(),
-			kustomize.NewVarReferenceFiller())),
+		templatingEngine:  kustomize.NewKustomizeEngine(),
 		childResourcePatcher: resource.ChildResourcePatcherChain{
 			resource.NewDefaultingAnnotationRemover(),
 			resource.NewOwnerReferenceAdder(),
@@ -104,7 +101,7 @@ func NewResurcePackReconciler(m manager.Manager, of schema.GroupVersionKind, opt
 	return r
 }
 
-type ResurcePackReconciler struct {
+type ResourcePackReconciler struct {
 	kube              client.Client
 	newParentResource func() resource.ParentResource
 	resourcePath      string
@@ -115,7 +112,7 @@ type ResurcePackReconciler struct {
 	childResourcePatcher resource.ChildResourcePatcherChain
 }
 
-func (r *ResurcePackReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *ResourcePackReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), reconcileTimeout)
 	defer cancel()
 
@@ -165,6 +162,12 @@ func Apply(ctx context.Context, kube client.Client, o resource.ChildResource) er
 	if err != nil {
 		return err
 	}
+	// NOTE(muvaf): Patch call asks client.MergeFrom object to calculate the patch
+	// between the runtime.Object in Patch call and the one that client.MergeFrom
+	// has. When you do a Patch, the expected flow is that `o` and `existing` are
+	// copy of each other but the only difference is that `o` has the overlay changes.
+	// But in our case, `o` is not retrieved from api-server, hence does not have
+	// ResourceVersion.
 	o.SetResourceVersion(existing.GetResourceVersion())
 	return kube.Patch(ctx, o, client.MergeFrom(existing))
 }
