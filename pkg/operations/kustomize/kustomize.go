@@ -93,13 +93,15 @@ type KustomizeEngine struct {
 }
 
 func (o *KustomizeEngine) Run(cr resource.ParentResource) ([]resource.ChildResource, error) {
+	k := &kustomizeapi.Kustomization{}
 	tmpl, err := ioutil.ReadFile(filepath.Join(o.ResourcePath, templateFileName))
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
-	k := &kustomizeapi.Kustomization{}
-	if err := yaml.Unmarshal(tmpl, k); err != nil {
-		return nil, err
+	if !os.IsNotExist(err) {
+		if err := yaml.Unmarshal(tmpl, k); err != nil {
+			return nil, err
+		}
 	}
 	if err := o.Patcher.Patch(cr, k); err != nil {
 		return nil, errors.Wrap(err, errPatch)

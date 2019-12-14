@@ -2,10 +2,8 @@ module github.com/muvaf/crossplane-resourcepacks
 
 go 1.13
 
-replace github.com/crossplaneio/crossplane-runtime => github.com/muvaf/crossplane-runtime v0.0.0-20191211130614-3cf4bd127550
-
 require (
-	github.com/crossplaneio/crossplane-runtime v0.2.3
+	github.com/crossplaneio/crossplane-runtime v0.2.4-0.20191212190515-075a01671bb7
 	github.com/google/go-cmp v0.3.1
 	github.com/pkg/errors v0.8.1
 	golang.org/x/net v0.0.0-20191004110552-13f9640d40b9
