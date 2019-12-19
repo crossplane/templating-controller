@@ -78,11 +78,11 @@ func TestReconcile(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			mgr := &runtimefake.MockManager{
+			mgr := &runtimefake.Manager{
 				Client: tc.kube,
-				Scheme: runtimefake.MockSchemeWith(&fake.MockParentResource{}),
+				Scheme: runtimefake.SchemeWith(&fake.MockParentResource{}),
 			}
-			r := NewResourcePackReconciler(mgr, runtimefake.MockGVK(&fake.MockParentResource{}))
+			r := NewResourcePackReconciler(mgr, runtimefake.GVK(&fake.MockParentResource{}))
 			_, err := r.Reconcile(reconcile.Request{})
 
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
