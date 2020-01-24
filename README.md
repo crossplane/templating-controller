@@ -82,7 +82,7 @@ GO111MODULE=on make manager manifests
 Now we have everything in place, the last step we need to take is to import this
 module and call the generic reconciler.
 ```bash
-go get github.com/muvaf/crossplane-resourcepacks
+go get github.com/crossplaneio/resourcepacks
 ```
 
 You need to change your `SetupWithManager` function in `controllers/helloworld_controller.go` 

@@ -1,4 +1,4 @@
-module github.com/muvaf/crossplane-resourcepacks
+module github.com/crossplaneio/resourcepacks
 
 go 1.13
 

@@ -16,7 +16,7 @@ limitations under the License.
 package kustomize
 
 import (
-	"github.com/muvaf/crossplane-resourcepacks/pkg/resource"
+	"github.com/crossplaneio/resourcepacks/pkg/resource"
 	"sigs.k8s.io/kustomize/api/types"
 )
 

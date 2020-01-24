@@ -19,7 +19,7 @@ package kustomize
 import (
 	"fmt"
 
-	"github.com/muvaf/crossplane-resourcepacks/pkg/resource"
+	"github.com/crossplaneio/resourcepacks/pkg/resource"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/kustomize/api/resid"
 	"sigs.k8s.io/kustomize/api/types"
