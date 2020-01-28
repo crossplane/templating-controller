@@ -90,7 +90,6 @@ func NewResourcePackReconciler(m manager.Manager, of schema.GroupVersionKind, op
 		longWait:          defaultLongWait,
 		templatingEngine:  kustomize.NewKustomizeEngine(),
 		childResourcePatcher: resource.ChildResourcePatcherChain{
-			resource.NewDefaultingAnnotationRemover(),
 			resource.NewOwnerReferenceAdder(),
 		},
 	}

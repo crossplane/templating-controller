@@ -1,0 +1,7 @@
+domain: crossplane.io
+repo: github.com/crossplaneio/resourcepacks
+resources:
+- group: stacks
+  kind: TemplateStack
+  version: v1alpha1
+version: "2"

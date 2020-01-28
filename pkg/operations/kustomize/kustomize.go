@@ -70,7 +70,6 @@ func NewKustomizeEngine(opt ...KustomizeOption) *KustomizeEngine {
 		ResourcePath: defaultRootPath,
 		Patcher: KustomizationPatcherChain{
 			NewNamePrefixer(),
-			NewLabelPropagator(),
 			NewVarReferenceFiller(),
 		},
 	}
