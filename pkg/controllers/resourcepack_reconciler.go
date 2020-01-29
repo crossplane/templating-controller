@@ -16,7 +16,6 @@ limitations under the License.
 package controllers
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/pkg/errors"
@@ -28,8 +27,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	kustomizeapi "sigs.k8s.io/kustomize/api/types"
 
-	"github.com/crossplaneio/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplaneio/crossplane-runtime/pkg/meta"
 	runtimeresource "github.com/crossplaneio/crossplane-runtime/pkg/resource"
 
@@ -80,15 +79,13 @@ func NewResourcePackReconciler(m manager.Manager, of schema.GroupVersionKind, op
 	nr := func() resource.ParentResource {
 		return runtimeresource.MustCreateObject(schema.GroupVersionKind(of), m.GetScheme()).(resource.ParentResource)
 	}
-	// Early panic if the resource doesn't satisfy ParentResource interface.
-	_ = nr()
 
 	r := &ResourcePackReconciler{
 		kube:              m.GetClient(),
 		newParentResource: nr,
 		shortWait:         defaultShortWait,
 		longWait:          defaultLongWait,
-		templatingEngine:  kustomize.NewKustomizeEngine(),
+		templatingEngine:  kustomize.NewKustomizeEngine(&kustomizeapi.Kustomization{}),
 		childResourcePatcher: resource.ChildResourcePatcherChain{
 			resource.NewOwnerReferenceAdder(),
 		},
@@ -130,24 +127,24 @@ func (r *ResourcePackReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 
 	childResources, err := r.templatingEngine.Run(cr)
 	if err != nil {
-		cr.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errTemplatingOperation)))
+		//cr.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errTemplatingOperation)))
 		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 
 	childResources, err = r.childResourcePatcher.Patch(cr, childResources)
 	if err != nil {
-		cr.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errChildResourcePatchers)))
+		//cr.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errChildResourcePatchers)))
 		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 
 	for _, o := range childResources {
 		if err := Apply(ctx, r.kube, o); err != nil {
-			cr.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, fmt.Sprintf("%s: %s/%s of type %s", errApply, o.GetName(), o.GetNamespace(), o.GetObjectKind().GroupVersionKind().String()))))
+			//cr.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, fmt.Sprintf("%s: %s/%s of type %s", errApply, o.GetName(), o.GetNamespace(), o.GetObjectKind().GroupVersionKind().String()))))
 			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 		}
 	}
 
-	cr.SetConditions(v1alpha1.ReconcileSuccess())
+	//cr.SetConditions(v1alpha1.ReconcileSuccess())
 	return ctrl.Result{RequeueAfter: r.longWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 }
 

@@ -18,11 +18,17 @@ package kustomize
 
 import (
 	"fmt"
+	"strings"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/crossplaneio/resourcepacks/api/v1alpha1"
 
 	"github.com/crossplaneio/resourcepacks/pkg/resource"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/kustomize/api/resid"
 	"sigs.k8s.io/kustomize/api/types"
+	"sigs.k8s.io/yaml"
 )
 
 // NewNamePrefixer returns a new *NamePrefixer.
@@ -107,4 +113,58 @@ func (la LabelPropagator) Patch(cr resource.ParentResource, k *types.Kustomizati
 		k.CommonLabels[key] = val
 	}
 	return nil
+}
+
+// NewPatchOverlayGenerator returns a new PatchOverlayGenerator.
+func NewPatchOverlayGenerator(overlays []v1alpha1.Overlay) PatchOverlayGenerator {
+	return PatchOverlayGenerator{
+		Overlays: overlays,
+	}
+}
+
+// NamePrefixer adds the name of the ParentResource as name prefix to be used
+// in Kustomize.
+type PatchOverlayGenerator struct {
+	Overlays []v1alpha1.Overlay
+}
+
+func (pog PatchOverlayGenerator) Generate(cr resource.ParentResource, k *types.Kustomization) ([]OverlayFile, error) {
+	if len(pog.Overlays) == 0 {
+		return nil, nil
+	}
+	finalOverlayYAML := ""
+	for _, overlay := range pog.Overlays {
+		obj := &unstructured.Unstructured{}
+		obj.SetAPIVersion(overlay.APIVersion)
+		obj.SetKind(overlay.Kind)
+		obj.SetName(overlay.Name)
+		obj.SetNamespace(overlay.Namespace)
+
+		for _, binding := range overlay.Bindings {
+			// First make sure there is a value in the referred path.
+			val, exists, err := unstructured.NestedFieldCopy(cr.UnstructuredContent(), strings.Split(binding.From, ".")...)
+			if err != nil {
+				return nil, err
+			}
+			if !exists {
+				continue
+			}
+			if err := unstructured.SetNestedField(obj.Object, val, strings.Split(binding.To, ".")...); err != nil {
+				return nil, err
+			}
+		}
+		overlayYAML, err := yaml.Marshal(obj)
+		if err != nil {
+			return nil, err
+		}
+		// TODO(muvaf): yaml.Marshal does not support outputting multiple YAML
+		// documents. That's temporary solution.
+		finalOverlayYAML = fmt.Sprintf("%s---\n%s", finalOverlayYAML, string(overlayYAML))
+	}
+	return []OverlayFile{
+		{
+			Name: "overlaypatch.yaml",
+			Data: []byte(finalOverlayYAML),
+		},
+	}, nil
 }

@@ -46,3 +46,28 @@ func (koc KustomizationPatcherChain) Patch(cr resource.ParentResource, k *types.
 	}
 	return nil
 }
+
+type OverlayFile struct {
+	Name string
+	Data []byte
+}
+
+type OverlayGenerator interface {
+	Generate(resource.ParentResource, *types.Kustomization) ([]OverlayFile, error)
+}
+
+// OverlayGeneratorChain makes it easier to provide a list of OverlayGenerator
+// to be called in order.
+type OverlayGeneratorChain []OverlayGenerator
+
+func (ogc OverlayGeneratorChain) Generate(cr resource.ParentResource, k *types.Kustomization) ([]OverlayFile, error) {
+	var result []OverlayFile
+	for _, f := range ogc {
+		file, err := f.Generate(cr, k)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, file...)
+	}
+	return result, nil
+}

@@ -21,6 +21,10 @@ import (
 	"os"
 	"path/filepath"
 
+	kustomizeapi "sigs.k8s.io/kustomize/api/types"
+
+	"gopkg.in/yaml.v3"
+
 	"gopkg.in/alecthomas/kingpin.v2"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -83,8 +87,16 @@ func main() {
 		var options []controllers.ResourcePackReconcilerOption
 		switch ts.Spec.Behavior.EngineConfiguration.Type {
 		case KustomizeEngine:
-			options = append(options, controllers.WithTemplatingEngine(kustomize.NewKustomizeEngine(
+
+			// TODO(muvaf): investigate a better way to convert *Unstructured to *Kustomization.
+			kustomizationYAML, err := yaml.Marshal(ts.Spec.Behavior.EngineConfiguration.Kustomization)
+			kingpin.FatalIfError(err, "cannot marshal kustomization object")
+			kustomization := &kustomizeapi.Kustomization{}
+			kingpin.FatalIfError(yaml.Unmarshal(kustomizationYAML, kustomization), "cannot unmarshal into kustomization object")
+
+			options = append(options, controllers.WithTemplatingEngine(kustomize.NewKustomizeEngine(kustomization,
 				kustomize.WithResourcePath(ts.Spec.Behavior.Source.Path),
+				kustomize.AdditionalOverlayGenerator(kustomize.NewPatchOverlayGenerator(ts.Spec.Behavior.EngineConfiguration.Overlays)),
 			)))
 		}
 
@@ -98,6 +110,8 @@ func main() {
 				Complete(controller),
 			"could not create controller",
 		)
+		kingpin.FatalIfError(clientgoscheme.AddToScheme(scheme), "could not register client go scheme")
+		kingpin.FatalIfError(stacksv1alpha1.AddToScheme(scheme), "could not register template stack scheme")
 		kingpin.FatalIfError(mgr.Start(ctrl.SetupSignalHandler()), "unable to run the manager")
 	}
 }

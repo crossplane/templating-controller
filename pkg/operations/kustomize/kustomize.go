@@ -61,16 +61,25 @@ func AdditionalKustomizationPatcher(op ...KustomizationPatcher) KustomizeOption 
 	}
 }
 
+// AdditionalOverlayGenerator allows you to append OverlayGenerator objects
+// to the generation pipeline.
+func AdditionalOverlayGenerator(op ...OverlayGenerator) KustomizeOption {
+	return func(ko *KustomizeEngine) {
+		ko.OverlayGenerators = append(ko.OverlayGenerators, op...)
+	}
+}
+
 // NewKustomizeEngine returns a KustomizeEngine object. rootPath should
 // point to the folder where your base kustomization.yaml resides and patcher
 // is the chain of KustomizationPatcher that makes modifications of Kustomization
 // object.
-func NewKustomizeEngine(opt ...KustomizeOption) *KustomizeEngine {
+func NewKustomizeEngine(k *kustomizeapi.Kustomization, opt ...KustomizeOption) *KustomizeEngine {
 	ko := &KustomizeEngine{
-		ResourcePath: defaultRootPath,
+		ResourcePath:  defaultRootPath,
+		Kustomization: k,
 		Patcher: KustomizationPatcherChain{
+			// todo: think how this should work with given Kustomization object.
 			NewNamePrefixer(),
-			NewVarReferenceFiller(),
 		},
 	}
 
@@ -86,30 +95,33 @@ type KustomizeEngine struct {
 	// filesystem. It should be given as absolute path.
 	ResourcePath string
 
+	// Kustomization is the content of kustomization.yaml file that contains
+	// Kustomize config.
+	Kustomization *kustomizeapi.Kustomization
+
 	// Patcher contains the modifications that you'd like to make to
 	// the overlay Kustomization object before calling kustomize.
 	Patcher KustomizationPatcherChain
+
+	// OverlayGenerators contains the overlay generators that will be added
+	// to the file system alongside kustomization.yaml
+	OverlayGenerators OverlayGeneratorChain
 }
 
 func (o *KustomizeEngine) Run(cr resource.ParentResource) ([]resource.ChildResource, error) {
-	k := &kustomizeapi.Kustomization{}
-	tmpl, err := ioutil.ReadFile(filepath.Join(o.ResourcePath, templateFileName))
-	if err != nil && !os.IsNotExist(err) {
-		return nil, err
-	}
-	if !os.IsNotExist(err) {
-		if err := yaml.Unmarshal(tmpl, k); err != nil {
-			return nil, err
-		}
-	}
-	if err := o.Patcher.Patch(cr, k); err != nil {
+	if err := o.Patcher.Patch(cr, o.Kustomization); err != nil {
 		return nil, errors.Wrap(err, errPatch)
 	}
-	dir, err := o.prepareOverlay(cr, k)
+	extraFiles, err := o.OverlayGenerators.Generate(cr, o.Kustomization)
+	if err != nil {
+		return nil, errors.Wrap(err, "overlay generator failed")
+	}
+	dir, err := o.prepareOverlay(o.Kustomization, extraFiles)
 	defer os.RemoveAll(dir)
 	if err != nil {
 		return nil, errors.Wrap(err, errOverlayPreparation)
 	}
+
 	kustomizer := krusty.MakeKustomizer(filesys.MakeFsOnDisk(), krusty.MakeDefaultOptions())
 	resMap, err := kustomizer.Run(dir)
 	if err != nil {
@@ -120,21 +132,12 @@ func (o *KustomizeEngine) Run(cr resource.ParentResource) ([]resource.ChildResou
 		u := &unstructured.Unstructured{}
 		// NOTE(muvaf): This is magic.
 		u.SetUnstructuredContent(res.Map())
-
-		// NOTE(muvaf): ParentResource is written to kustomization directory
-		// only to be used for value retrieval. We remove it from the render
-		// results here.
-		if u.GroupVersionKind() == cr.GetObjectKind().GroupVersionKind() {
-			continue
-		}
-
 		objects = append(objects, u)
 	}
-
 	return objects, nil
 }
 
-func (o *KustomizeEngine) prepareOverlay(cr resource.ParentResource, k *kustomizeapi.Kustomization) (string, error) {
+func (o *KustomizeEngine) prepareOverlay(k *kustomizeapi.Kustomization, extraFiles []OverlayFile) (string, error) {
 	// NOTE(muvaf): Kustomize does not work with symlinked paths, so, we're
 	// using their temp directory generation function that handles this instead
 	// of Golang's.
@@ -143,14 +146,6 @@ func (o *KustomizeEngine) prepareOverlay(cr resource.ParentResource, k *kustomiz
 		return "", err
 	}
 	tempDir := string(tempConfirmedDir)
-
-	crYAML, err := yaml.Marshal(cr)
-	if err != nil {
-		return "", err
-	}
-	if err := ioutil.WriteFile(filepath.Join(tempDir, temporaryCRFileName), crYAML, os.ModePerm); err != nil {
-		return "", err
-	}
 
 	// NOTE(muvaf): Kustomize doesn't work with absolute paths, all paths have
 	// to be relative to the root path of the folder where kustomize points to,
@@ -163,7 +158,13 @@ func (o *KustomizeEngine) prepareOverlay(cr resource.ParentResource, k *kustomiz
 	if err != nil {
 		return "", err
 	}
-	k.Resources = append(k.Resources, []string{relPath, temporaryCRFileName}...)
+	k.Resources = append(k.Resources, relPath)
+	for _, file := range extraFiles {
+		if err := ioutil.WriteFile(filepath.Join(tempDir, file.Name), file.Data, os.ModePerm); err != nil {
+			return "", err
+		}
+		k.Resources = append(k.Resources, file.Name)
+	}
 	yamlData, err := yaml.Marshal(k)
 	if err != nil {
 		return "", err

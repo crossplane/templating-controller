@@ -49,6 +49,10 @@ func (m *MockParentResource) DeepCopyObject() runtime.Object {
 	return out
 }
 
+func (m *MockParentResource) UnstructuredContent() map[string]interface{} {
+	return nil
+}
+
 type MockChildResource struct {
 	metav1.ObjectMeta
 }
