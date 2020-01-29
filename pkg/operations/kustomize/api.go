@@ -161,9 +161,11 @@ func (pog PatchOverlayGenerator) Generate(cr resource.ParentResource, k *types.K
 		// documents. That's temporary solution.
 		finalOverlayYAML = fmt.Sprintf("%s---\n%s", finalOverlayYAML, string(overlayYAML))
 	}
+	fileName := "overlaypatch.yaml"
+	k.PatchesStrategicMerge = append(k.PatchesStrategicMerge, types.PatchStrategicMerge(fileName))
 	return []OverlayFile{
 		{
-			Name: "overlaypatch.yaml",
+			Name: fileName,
 			Data: []byte(finalOverlayYAML),
 		},
 	}, nil

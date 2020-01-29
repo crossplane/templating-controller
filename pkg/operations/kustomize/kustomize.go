@@ -159,18 +159,17 @@ func (o *KustomizeEngine) prepareOverlay(k *kustomizeapi.Kustomization, extraFil
 		return "", err
 	}
 	k.Resources = append(k.Resources, relPath)
-	for _, file := range extraFiles {
-		if err := ioutil.WriteFile(filepath.Join(tempDir, file.Name), file.Data, os.ModePerm); err != nil {
-			return "", err
-		}
-		k.Resources = append(k.Resources, file.Name)
-	}
 	yamlData, err := yaml.Marshal(k)
 	if err != nil {
 		return "", err
 	}
 	if err := ioutil.WriteFile(filepath.Join(tempDir, kustomizationFileName), yamlData, os.ModePerm); err != nil {
 		return "", err
+	}
+	for _, file := range extraFiles {
+		if err := ioutil.WriteFile(filepath.Join(tempDir, file.Name), file.Data, os.ModePerm); err != nil {
+			return "", err
+		}
 	}
 	return tempDir, nil
 }

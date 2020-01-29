@@ -17,22 +17,21 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 
-	kustomizeapi "sigs.k8s.io/kustomize/api/types"
-
-	"gopkg.in/yaml.v3"
-
 	"gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/yaml.v3"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	kustomizeapi "sigs.k8s.io/kustomize/api/types"
 
 	stacksv1alpha1 "github.com/crossplaneio/resourcepacks/api/v1alpha1"
 	"github.com/crossplaneio/resourcepacks/pkg/controllers"
@@ -46,13 +45,6 @@ const (
 var (
 	scheme = runtime.NewScheme()
 )
-
-func init() {
-	_ = clientgoscheme.AddToScheme(scheme)
-
-	_ = stacksv1alpha1.AddToScheme(scheme)
-	// +kubebuilder:scaffold:scheme
-}
 
 func main() {
 	var (
@@ -70,19 +62,24 @@ func main() {
 	)
 	cmd := kingpin.MustParse(app.Parse(os.Args[1:]))
 
+	kingpin.FatalIfError(clientgoscheme.AddToScheme(scheme), "could not register client-go scheme")
+	kingpin.FatalIfError(stacksv1alpha1.AddToScheme(scheme), "could not register stacks group scheme")
+
 	switch cmd {
 	case reconcileCmd.FullCommand():
-		ctx := context.Background()
 		mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-			Scheme:         scheme,
-			LeaderElection: true,
-			Port:           9443,
+			Scheme: scheme,
+			Port:   9443,
 		})
 		kingpin.FatalIfError(err, "unable to start manager")
 
-		ts := &stacksv1alpha1.TemplateStack{}
-		key := types.NamespacedName{Name: *templateStackNameInput, Namespace: *templateStackNamespaceInput}
-		kingpin.FatalIfError(mgr.GetClient().Get(ctx, key, ts), "could not fetch the TemplateStack object")
+		ts := &stacksv1alpha1.TemplateStack{
+			ObjectMeta: v1.ObjectMeta{
+				Name:      *templateStackNameInput,
+				Namespace: *templateStackNamespaceInput,
+			},
+		}
+		kingpin.FatalIfError(getTemplateStack(ts), "could not fetch the TemplateStack object")
 
 		var options []controllers.ResourcePackReconcilerOption
 		switch ts.Spec.Behavior.EngineConfiguration.Type {
@@ -99,14 +96,13 @@ func main() {
 				kustomize.AdditionalOverlayGenerator(kustomize.NewPatchOverlayGenerator(ts.Spec.Behavior.EngineConfiguration.Overlays)),
 			)))
 		}
-
-		controller := controllers.NewResourcePackReconciler(
-			mgr,
-			schema.FromAPIVersionAndKind(ts.Spec.Behavior.CRD.APIVersion, ts.Spec.Behavior.CRD.Kind),
-			options...)
+		gvk := schema.FromAPIVersionAndKind(ts.Spec.Behavior.CRD.APIVersion, ts.Spec.Behavior.CRD.Kind)
+		controller := controllers.NewResourcePackReconciler(mgr, gvk, options...)
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(gvk)
 		kingpin.FatalIfError(
 			ctrl.NewControllerManagedBy(mgr).
-				For(&unstructured.Unstructured{}).
+				For(u).
 				Complete(controller),
 			"could not create controller",
 		)
@@ -114,4 +110,20 @@ func main() {
 		kingpin.FatalIfError(stacksv1alpha1.AddToScheme(scheme), "could not register template stack scheme")
 		kingpin.FatalIfError(mgr.Start(ctrl.SetupSignalHandler()), "unable to run the manager")
 	}
+}
+
+// TODO: Controller-runtime client doesn't work until manager is started, which
+// is a blocking operation. So, we can't call any controller-runtime client functions
+// here in main.go
+// Instead, we use rest client directly for the time being.
+func getTemplateStack(ts *stacksv1alpha1.TemplateStack) error {
+	config := ctrl.GetConfigOrDie()
+	config.ContentConfig.GroupVersion = &stacksv1alpha1.GroupVersion
+	config.APIPath = "/apis"
+	config.NegotiatedSerializer = serializer.NewCodecFactory(scheme)
+	client, err := rest.RESTClientFor(config)
+	if err != nil {
+		return err
+	}
+	return client.Get().Name(ts.Name).Namespace(ts.Namespace).Resource("templatestacks").Do().Into(ts)
 }

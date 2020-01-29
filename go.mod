@@ -7,6 +7,7 @@ require (
 	github.com/crossplaneio/crossplane-runtime v0.4.0
 	github.com/google/go-cmp v0.3.1
 	github.com/pkg/errors v0.8.1
+	github.com/prometheus/common v0.6.0
 	golang.org/x/net v0.0.0-20191004110552-13f9640d40b9
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/yaml.v3 v3.0.0-20190905181640-827449938966

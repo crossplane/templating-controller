@@ -16,11 +16,14 @@ limitations under the License.
 package controllers
 
 import (
+	"fmt"
+	"log"
 	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -29,8 +32,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	kustomizeapi "sigs.k8s.io/kustomize/api/types"
 
+	"github.com/crossplaneio/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplaneio/crossplane-runtime/pkg/meta"
-	runtimeresource "github.com/crossplaneio/crossplane-runtime/pkg/resource"
 
 	"github.com/crossplaneio/resourcepacks/pkg/operations/kustomize"
 	"github.com/crossplaneio/resourcepacks/pkg/resource"
@@ -77,7 +80,9 @@ func WithLongWait(d time.Duration) ResourcePackReconcilerOption {
 
 func NewResourcePackReconciler(m manager.Manager, of schema.GroupVersionKind, options ...ResourcePackReconcilerOption) *ResourcePackReconciler {
 	nr := func() resource.ParentResource {
-		return runtimeresource.MustCreateObject(schema.GroupVersionKind(of), m.GetScheme()).(resource.ParentResource)
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(of)
+		return u
 	}
 
 	r := &ResourcePackReconciler{
@@ -127,24 +132,24 @@ func (r *ResourcePackReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 
 	childResources, err := r.templatingEngine.Run(cr)
 	if err != nil {
-		//cr.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errTemplatingOperation)))
+		logErr(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errTemplatingOperation))))
 		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 
 	childResources, err = r.childResourcePatcher.Patch(cr, childResources)
 	if err != nil {
-		//cr.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errChildResourcePatchers)))
+		logErr(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errChildResourcePatchers))))
 		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 
 	for _, o := range childResources {
 		if err := Apply(ctx, r.kube, o); err != nil {
-			//cr.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, fmt.Sprintf("%s: %s/%s of type %s", errApply, o.GetName(), o.GetNamespace(), o.GetObjectKind().GroupVersionKind().String()))))
+			logErr(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, fmt.Sprintf("%s: %s/%s of type %s", errApply, o.GetName(), o.GetNamespace(), o.GetObjectKind().GroupVersionKind().String())))))
 			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 		}
 	}
 
-	//cr.SetConditions(v1alpha1.ReconcileSuccess())
+	logErr(resource.SetConditions(cr, v1alpha1.ReconcileSuccess()))
 	return ctrl.Result{RequeueAfter: r.longWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 }
 
@@ -166,4 +171,11 @@ func Apply(ctx context.Context, kube client.Client, o resource.ChildResource) er
 	// ResourceVersion.
 	o.SetResourceVersion(existing.GetResourceVersion())
 	return kube.Patch(ctx, o, client.MergeFrom(existing))
+}
+
+// TODO: temprary.
+func logErr(err error) {
+	if err != nil {
+		log.Print(err.Error())
+	}
 }
