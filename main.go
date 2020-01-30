@@ -33,9 +33,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	kustomizeapi "sigs.k8s.io/kustomize/api/types"
 
-	stacksv1alpha1 "github.com/crossplaneio/resourcepacks/api/v1alpha1"
-	"github.com/crossplaneio/resourcepacks/pkg/controllers"
-	"github.com/crossplaneio/resourcepacks/pkg/operations/kustomize"
+	stacksv1alpha1 "github.com/crossplaneio/templating-controller/api/v1alpha1"
+	"github.com/crossplaneio/templating-controller/pkg/controllers"
+	"github.com/crossplaneio/templating-controller/pkg/operations/kustomize"
 )
 
 const (
@@ -49,14 +49,10 @@ var (
 func main() {
 	var (
 		// top level app definition
-		app = kingpin.New(filepath.Base(os.Args[0]), "An open source multicloud control plane.").DefaultEnvars()
-		//debug      = app.Flag("debug", "Run with debug logging.").Short('d').Bool()
+		app = kingpin.New(filepath.Base(os.Args[0]), "Templating controller for Crossplane Template Stacks.").DefaultEnvars()
 
 		// The default controller mode.
-		controllerCmd = app.Command(filepath.Base(os.Args[0]), "An open source multicloud control plane.").Default()
-
-		// Configuration for the reconciler.
-		reconcileCmd                = controllerCmd.Command("reconcile", "Reconcile a Custom Resource")
+		controllerCmd               = app.Command(filepath.Base(os.Args[0]), "Templating controller for Crossplane Template Stacks.").Default()
 		templateStackNameInput      = controllerCmd.Flag("template-stack-name", "Name of the TemplateStack custom resource.").Required().String()
 		templateStackNamespaceInput = controllerCmd.Flag("template-stack-namespace", "Namespace of the TemplateStack custom resource").String()
 	)
@@ -66,13 +62,12 @@ func main() {
 	kingpin.FatalIfError(stacksv1alpha1.AddToScheme(scheme), "could not register stacks group scheme")
 
 	switch cmd {
-	case reconcileCmd.FullCommand():
+	case controllerCmd.FullCommand():
 		mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 			Scheme: scheme,
 			Port:   9443,
 		})
 		kingpin.FatalIfError(err, "unable to start manager")
-
 		ts := &stacksv1alpha1.TemplateStack{
 			ObjectMeta: v1.ObjectMeta{
 				Name:      *templateStackNameInput,
@@ -81,10 +76,9 @@ func main() {
 		}
 		kingpin.FatalIfError(getTemplateStack(ts), "could not fetch the TemplateStack object")
 
-		var options []controllers.ResourcePackReconcilerOption
+		var options []controllers.TemplatingReconcilerOption
 		switch ts.Spec.Behavior.EngineConfiguration.Type {
 		case KustomizeEngine:
-
 			// TODO(muvaf): investigate a better way to convert *Unstructured to *Kustomization.
 			kustomizationYAML, err := yaml.Marshal(ts.Spec.Behavior.EngineConfiguration.Kustomization)
 			kingpin.FatalIfError(err, "cannot marshal kustomization object")
@@ -96,8 +90,9 @@ func main() {
 				kustomize.AdditionalOverlayGenerator(kustomize.NewPatchOverlayGenerator(ts.Spec.Behavior.EngineConfiguration.Overlays)),
 			)))
 		}
+
 		gvk := schema.FromAPIVersionAndKind(ts.Spec.Behavior.CRD.APIVersion, ts.Spec.Behavior.CRD.Kind)
-		controller := controllers.NewResourcePackReconciler(mgr, gvk, options...)
+		controller := controllers.NewTemplatingReconciler(mgr, gvk, options...)
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(gvk)
 		kingpin.FatalIfError(

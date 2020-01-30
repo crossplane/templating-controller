@@ -1,4 +1,4 @@
-module github.com/crossplaneio/resourcepacks
+module github.com/crossplaneio/templating-controller
 
 go 1.13
 

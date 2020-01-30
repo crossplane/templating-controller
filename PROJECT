@@ -1,5 +1,5 @@
 domain: crossplane.io
-repo: github.com/crossplaneio/resourcepacks
+repo: github.com/crossplaneio/templating-controller
 resources:
 - group: stacks
   kind: TemplateStack

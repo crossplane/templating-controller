@@ -35,8 +35,8 @@ import (
 	"github.com/crossplaneio/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplaneio/crossplane-runtime/pkg/meta"
 
-	"github.com/crossplaneio/resourcepacks/pkg/operations/kustomize"
-	"github.com/crossplaneio/resourcepacks/pkg/resource"
+	"github.com/crossplaneio/templating-controller/pkg/operations/kustomize"
+	"github.com/crossplaneio/templating-controller/pkg/resource"
 )
 
 const (
@@ -52,40 +52,40 @@ const (
 	errApply                 = "apply failed"
 )
 
-type ResourcePackReconcilerOption func(*ResourcePackReconciler)
+type TemplatingReconcilerOption func(*TemplatingReconciler)
 
-func AdditionalChildResourcePatcher(op ...resource.ChildResourcePatcher) ResourcePackReconcilerOption {
-	return func(reconciler *ResourcePackReconciler) {
+func AdditionalChildResourcePatcher(op ...resource.ChildResourcePatcher) TemplatingReconcilerOption {
+	return func(reconciler *TemplatingReconciler) {
 		reconciler.childResourcePatcher = append(reconciler.childResourcePatcher, op...)
 	}
 }
 
-func WithTemplatingEngine(eng resource.TemplatingEngine) ResourcePackReconcilerOption {
-	return func(reconciler *ResourcePackReconciler) {
+func WithTemplatingEngine(eng resource.TemplatingEngine) TemplatingReconcilerOption {
+	return func(reconciler *TemplatingReconciler) {
 		reconciler.templatingEngine = eng
 	}
 }
 
-func WithShortWait(d time.Duration) ResourcePackReconcilerOption {
-	return func(reconciler *ResourcePackReconciler) {
+func WithShortWait(d time.Duration) TemplatingReconcilerOption {
+	return func(reconciler *TemplatingReconciler) {
 		reconciler.shortWait = d
 	}
 }
 
-func WithLongWait(d time.Duration) ResourcePackReconcilerOption {
-	return func(reconciler *ResourcePackReconciler) {
+func WithLongWait(d time.Duration) TemplatingReconcilerOption {
+	return func(reconciler *TemplatingReconciler) {
 		reconciler.longWait = d
 	}
 }
 
-func NewResourcePackReconciler(m manager.Manager, of schema.GroupVersionKind, options ...ResourcePackReconcilerOption) *ResourcePackReconciler {
+func NewTemplatingReconciler(m manager.Manager, of schema.GroupVersionKind, options ...TemplatingReconcilerOption) *TemplatingReconciler {
 	nr := func() resource.ParentResource {
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(of)
 		return u
 	}
 
-	r := &ResourcePackReconciler{
+	r := &TemplatingReconciler{
 		kube:              m.GetClient(),
 		newParentResource: nr,
 		shortWait:         defaultShortWait,
@@ -93,6 +93,7 @@ func NewResourcePackReconciler(m manager.Manager, of schema.GroupVersionKind, op
 		templatingEngine:  kustomize.NewKustomizeEngine(&kustomizeapi.Kustomization{}),
 		childResourcePatcher: resource.ChildResourcePatcherChain{
 			resource.NewOwnerReferenceAdder(),
+			resource.NewDefaultingAnnotationRemover(),
 		},
 	}
 
@@ -102,7 +103,7 @@ func NewResourcePackReconciler(m manager.Manager, of schema.GroupVersionKind, op
 	return r
 }
 
-type ResourcePackReconciler struct {
+type TemplatingReconciler struct {
 	kube              client.Client
 	newParentResource func() resource.ParentResource
 	resourcePath      string
@@ -113,7 +114,7 @@ type ResourcePackReconciler struct {
 	childResourcePatcher resource.ChildResourcePatcherChain
 }
 
-func (r *ResourcePackReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *TemplatingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), reconcileTimeout)
 	defer cancel()
 

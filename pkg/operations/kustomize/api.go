@@ -22,9 +22,9 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	"github.com/crossplaneio/resourcepacks/api/v1alpha1"
+	"github.com/crossplaneio/templating-controller/api/v1alpha1"
 
-	"github.com/crossplaneio/resourcepacks/pkg/resource"
+	"github.com/crossplaneio/templating-controller/pkg/resource"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/kustomize/api/resid"
 	"sigs.k8s.io/kustomize/api/types"

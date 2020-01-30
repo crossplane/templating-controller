@@ -29,7 +29,7 @@ import (
 	kustomizeapi "sigs.k8s.io/kustomize/api/types"
 	"sigs.k8s.io/yaml"
 
-	"github.com/crossplaneio/resourcepacks/pkg/resource"
+	"github.com/crossplaneio/templating-controller/pkg/resource"
 )
 
 const (
@@ -57,7 +57,7 @@ func WithResourcePath(path string) KustomizeOption {
 // to the patch pipeline.
 func AdditionalKustomizationPatcher(op ...KustomizationPatcher) KustomizeOption {
 	return func(ko *KustomizeEngine) {
-		ko.Patcher = append(ko.Patcher, op...)
+		ko.Patchers = append(ko.Patchers, op...)
 	}
 }
 
@@ -77,8 +77,9 @@ func NewKustomizeEngine(k *kustomizeapi.Kustomization, opt ...KustomizeOption) *
 	ko := &KustomizeEngine{
 		ResourcePath:  defaultRootPath,
 		Kustomization: k,
-		Patcher: KustomizationPatcherChain{
-			// todo: think how this should work with given Kustomization object.
+		Patchers: KustomizationPatcherChain{
+			// TODO(muvaf): think how this should work if name prefix is already
+			// given.
 			NewNamePrefixer(),
 		},
 	}
@@ -99,9 +100,9 @@ type KustomizeEngine struct {
 	// Kustomize config.
 	Kustomization *kustomizeapi.Kustomization
 
-	// Patcher contains the modifications that you'd like to make to
+	// Patchers contains the modifications that you'd like to make to
 	// the overlay Kustomization object before calling kustomize.
-	Patcher KustomizationPatcherChain
+	Patchers KustomizationPatcherChain
 
 	// OverlayGenerators contains the overlay generators that will be added
 	// to the file system alongside kustomization.yaml
@@ -109,7 +110,7 @@ type KustomizeEngine struct {
 }
 
 func (o *KustomizeEngine) Run(cr resource.ParentResource) ([]resource.ChildResource, error) {
-	if err := o.Patcher.Patch(cr, o.Kustomization); err != nil {
+	if err := o.Patchers.Patch(cr, o.Kustomization); err != nil {
 		return nil, errors.Wrap(err, errPatch)
 	}
 	extraFiles, err := o.OverlayGenerators.Generate(cr, o.Kustomization)
@@ -121,7 +122,6 @@ func (o *KustomizeEngine) Run(cr resource.ParentResource) ([]resource.ChildResou
 	if err != nil {
 		return nil, errors.Wrap(err, errOverlayPreparation)
 	}
-
 	kustomizer := krusty.MakeKustomizer(filesys.MakeFsOnDisk(), krusty.MakeDefaultOptions())
 	resMap, err := kustomizer.Run(dir)
 	if err != nil {

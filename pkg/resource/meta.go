@@ -25,6 +25,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
+// TODO(muvaf): this is kind of hacky. We need to revise the logic to get rid of
+// json Marsha/Unmarshal stuff.
+
 // GetCondition returns the condition for the given ConditionType if exists,
 // otherwise returns nil
 func GetCondition(cr interface{ UnstructuredContent() map[string]interface{} }, ct v1alpha1.ConditionType) v1alpha1.Condition {
@@ -52,7 +55,7 @@ func GetCondition(cr interface{ UnstructuredContent() map[string]interface{} }, 
 // of the same type. This is a no-op if all supplied conditions are identical,
 // ignoring the last transition time, to those already set.
 func SetConditions(cr interface{ UnstructuredContent() map[string]interface{} }, c ...v1alpha1.Condition) error {
-	var conditions []v1alpha1.Condition
+	conditions := []v1alpha1.Condition{}
 	fetched, exists, err := unstructured.NestedFieldCopy(cr.UnstructuredContent(), "status", "conditions")
 	if err != nil {
 		return err
@@ -62,7 +65,7 @@ func SetConditions(cr interface{ UnstructuredContent() map[string]interface{} },
 		if err != nil {
 			return err
 		}
-		if err := json.Unmarshal(statusJSON, conditions); err != nil {
+		if err := json.Unmarshal(statusJSON, &conditions); err != nil {
 			return err
 		}
 	}

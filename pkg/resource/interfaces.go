@@ -21,10 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// todo: think about how we can embed resource.Conditioned to unstructured.Unstructured.
-
 // ParentResource should be satisfied by the stack CRD that would like to use
-// generic Resource Pack Reconciler.
+// Templating Reconciler.
 type ParentResource interface {
 	runtime.Object
 	metav1.Object
