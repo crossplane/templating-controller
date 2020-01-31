@@ -94,6 +94,7 @@ func NewTemplatingReconciler(m manager.Manager, of schema.GroupVersionKind, opti
 		childResourcePatcher: resource.ChildResourcePatcherChain{
 			resource.NewOwnerReferenceAdder(),
 			resource.NewDefaultingAnnotationRemover(),
+			resource.NewNamespacePatcher(),
 		},
 	}
 

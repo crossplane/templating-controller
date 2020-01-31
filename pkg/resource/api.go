@@ -81,6 +81,27 @@ func (lo DefaultingAnnotationRemover) Patch(cr ParentResource, list []ChildResou
 	return list, nil
 }
 
+// NewNamespacePatcher returns a new NamespacePatcher
+func NewNamespacePatcher() NamespacePatcher {
+	return NamespacePatcher{}
+}
+
+// NamespacePatcher patches the child resources whose metadata.namespace is empty
+// with namespace of the parent resource.
+type NamespacePatcher struct{}
+
+func (lo NamespacePatcher) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
+	if cr.GetNamespace() == "" {
+		return list, nil
+	}
+	for _, o := range list {
+		if o.GetNamespace() == "" {
+			o.SetNamespace(cr.GetNamespace())
+		}
+	}
+	return list, nil
+}
+
 // todo: temp solution to detect provider kind.
 func isProvider(o runtime.Object) bool {
 	gvk := o.GetObjectKind().GroupVersionKind()

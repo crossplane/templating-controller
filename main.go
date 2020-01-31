@@ -21,7 +21,7 @@ import (
 	"path/filepath"
 
 	"gopkg.in/alecthomas/kingpin.v2"
-	"gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v2"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,7 +33,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	kustomizeapi "sigs.k8s.io/kustomize/api/types"
 
-	stacksv1alpha1 "github.com/crossplaneio/templating-controller/api/v1alpha1"
+	"github.com/crossplaneio/crossplane/apis/stacks"
+	"github.com/crossplaneio/crossplane/apis/stacks/v1alpha1"
+
 	"github.com/crossplaneio/templating-controller/pkg/controllers"
 	"github.com/crossplaneio/templating-controller/pkg/operations/kustomize"
 )
@@ -52,14 +54,15 @@ func main() {
 		app = kingpin.New(filepath.Base(os.Args[0]), "Templating controller for Crossplane Template Stacks.").DefaultEnvars()
 
 		// The default controller mode.
-		controllerCmd               = app.Command(filepath.Base(os.Args[0]), "Templating controller for Crossplane Template Stacks.").Default()
-		templateStackNameInput      = controllerCmd.Flag("template-stack-name", "Name of the TemplateStack custom resource.").Required().String()
-		templateStackNamespaceInput = controllerCmd.Flag("template-stack-namespace", "Namespace of the TemplateStack custom resource").String()
+		controllerCmd                 = app.Command(filepath.Base(os.Args[0]), "Templating controller for Crossplane Template Stacks.").Default()
+		stackDefinitionNameInput      = controllerCmd.Flag("stack-definition-name", "Name of the StackDefinition custom resource.").Required().String()
+		stackDefinitionNamespaceInput = controllerCmd.Flag("stack-definition-namespace", "Namespace of the StackDefinition custom resource").String()
+		resourceDirInput              = controllerCmd.Flag("resources-dir", "Directory of the resources to be fetched as input to the templating engine").Required().ExistingDir()
 	)
 	cmd := kingpin.MustParse(app.Parse(os.Args[1:]))
 
 	kingpin.FatalIfError(clientgoscheme.AddToScheme(scheme), "could not register client-go scheme")
-	kingpin.FatalIfError(stacksv1alpha1.AddToScheme(scheme), "could not register stacks group scheme")
+	kingpin.FatalIfError(stacks.AddToScheme(scheme), "could not register stacks group scheme")
 
 	switch cmd {
 	case controllerCmd.FullCommand():
@@ -68,30 +71,30 @@ func main() {
 			Port:   9443,
 		})
 		kingpin.FatalIfError(err, "unable to start manager")
-		ts := &stacksv1alpha1.TemplateStack{
+		sd := &v1alpha1.StackDefinition{
 			ObjectMeta: v1.ObjectMeta{
-				Name:      *templateStackNameInput,
-				Namespace: *templateStackNamespaceInput,
+				Name:      *stackDefinitionNameInput,
+				Namespace: *stackDefinitionNamespaceInput,
 			},
 		}
-		kingpin.FatalIfError(getTemplateStack(ts), "could not fetch the TemplateStack object")
+		kingpin.FatalIfError(getStackDefinition(sd), "could not fetch the StackDefinition object")
 
 		var options []controllers.TemplatingReconcilerOption
-		switch ts.Spec.Behavior.EngineConfiguration.Type {
+		switch sd.Spec.Behavior.Engine.Type {
 		case KustomizeEngine:
 			// TODO(muvaf): investigate a better way to convert *Unstructured to *Kustomization.
-			kustomizationYAML, err := yaml.Marshal(ts.Spec.Behavior.EngineConfiguration.Kustomization)
+			kustomizationYAML, err := yaml.Marshal(sd.Spec.Behavior.Engine.Kustomize.Kustomization)
 			kingpin.FatalIfError(err, "cannot marshal kustomization object")
 			kustomization := &kustomizeapi.Kustomization{}
 			kingpin.FatalIfError(yaml.Unmarshal(kustomizationYAML, kustomization), "cannot unmarshal into kustomization object")
-
-			options = append(options, controllers.WithTemplatingEngine(kustomize.NewKustomizeEngine(kustomization,
-				kustomize.WithResourcePath(ts.Spec.Behavior.Source.Path),
-				kustomize.AdditionalOverlayGenerator(kustomize.NewPatchOverlayGenerator(ts.Spec.Behavior.EngineConfiguration.Overlays)),
-			)))
+			options = append(options,
+				controllers.WithTemplatingEngine(kustomize.NewKustomizeEngine(kustomization,
+					kustomize.WithResourcePath(*resourceDirInput),
+					kustomize.AdditionalOverlayGenerator(kustomize.NewPatchOverlayGenerator(sd.Spec.Behavior.Engine.Kustomize.Overlays)),
+				)))
 		}
 
-		gvk := schema.FromAPIVersionAndKind(ts.Spec.Behavior.CRD.APIVersion, ts.Spec.Behavior.CRD.Kind)
+		gvk := schema.FromAPIVersionAndKind(sd.Spec.Behavior.CRD.APIVersion, sd.Spec.Behavior.CRD.Kind)
 		controller := controllers.NewTemplatingReconciler(mgr, gvk, options...)
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(gvk)
@@ -101,8 +104,6 @@ func main() {
 				Complete(controller),
 			"could not create controller",
 		)
-		kingpin.FatalIfError(clientgoscheme.AddToScheme(scheme), "could not register client go scheme")
-		kingpin.FatalIfError(stacksv1alpha1.AddToScheme(scheme), "could not register template stack scheme")
 		kingpin.FatalIfError(mgr.Start(ctrl.SetupSignalHandler()), "unable to run the manager")
 	}
 }
@@ -111,14 +112,14 @@ func main() {
 // is a blocking operation. So, we can't call any controller-runtime client functions
 // here in main.go
 // Instead, we use rest client directly for the time being.
-func getTemplateStack(ts *stacksv1alpha1.TemplateStack) error {
+func getStackDefinition(sd *v1alpha1.StackDefinition) error {
 	config := ctrl.GetConfigOrDie()
-	config.ContentConfig.GroupVersion = &stacksv1alpha1.GroupVersion
+	config.ContentConfig.GroupVersion = &v1alpha1.SchemeGroupVersion
 	config.APIPath = "/apis"
 	config.NegotiatedSerializer = serializer.NewCodecFactory(scheme)
 	client, err := rest.RESTClientFor(config)
 	if err != nil {
 		return err
 	}
-	return client.Get().Name(ts.Name).Namespace(ts.Namespace).Resource("templatestacks").Do().Into(ts)
+	return client.Get().Name(sd.Name).Namespace(sd.Namespace).Resource("stackdefinitions").Do().Into(sd)
 }

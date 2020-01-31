@@ -21,14 +21,14 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
-	"github.com/crossplaneio/templating-controller/api/v1alpha1"
-
-	"github.com/crossplaneio/templating-controller/pkg/resource"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/kustomize/api/resid"
 	"sigs.k8s.io/kustomize/api/types"
 	"sigs.k8s.io/yaml"
+
+	"github.com/crossplaneio/crossplane/apis/stacks/v1alpha1"
+
+	"github.com/crossplaneio/templating-controller/pkg/resource"
 )
 
 // NewNamePrefixer returns a new *NamePrefixer.
@@ -116,7 +116,7 @@ func (la LabelPropagator) Patch(cr resource.ParentResource, k *types.Kustomizati
 }
 
 // NewPatchOverlayGenerator returns a new PatchOverlayGenerator.
-func NewPatchOverlayGenerator(overlays []v1alpha1.Overlay) PatchOverlayGenerator {
+func NewPatchOverlayGenerator(overlays []v1alpha1.ResourceEngineOverlay) PatchOverlayGenerator {
 	return PatchOverlayGenerator{
 		Overlays: overlays,
 	}
@@ -125,7 +125,7 @@ func NewPatchOverlayGenerator(overlays []v1alpha1.Overlay) PatchOverlayGenerator
 // NamePrefixer adds the name of the ParentResource as name prefix to be used
 // in Kustomize.
 type PatchOverlayGenerator struct {
-	Overlays []v1alpha1.Overlay
+	Overlays []v1alpha1.ResourceEngineOverlay
 }
 
 func (pog PatchOverlayGenerator) Generate(cr resource.ParentResource, k *types.Kustomization) ([]OverlayFile, error) {
@@ -138,7 +138,8 @@ func (pog PatchOverlayGenerator) Generate(cr resource.ParentResource, k *types.K
 		obj.SetAPIVersion(overlay.APIVersion)
 		obj.SetKind(overlay.Kind)
 		obj.SetName(overlay.Name)
-		obj.SetNamespace(overlay.Namespace)
+		// todo: stackdefinition does not support namespace yet.
+		// obj.SetNamespace(overlay.Namespace)
 
 		for _, binding := range overlay.Bindings {
 			// First make sure there is a value in the referred path.
@@ -162,11 +163,21 @@ func (pog PatchOverlayGenerator) Generate(cr resource.ParentResource, k *types.K
 		finalOverlayYAML = fmt.Sprintf("%s---\n%s", finalOverlayYAML, string(overlayYAML))
 	}
 	fileName := "overlaypatch.yaml"
-	k.PatchesStrategicMerge = append(k.PatchesStrategicMerge, types.PatchStrategicMerge(fileName))
+	k.PatchesStrategicMerge = appendPatchMergeIfNotExists(k.PatchesStrategicMerge, types.PatchStrategicMerge(fileName))
 	return []OverlayFile{
 		{
 			Name: fileName,
 			Data: []byte(finalOverlayYAML),
 		},
 	}, nil
+}
+
+// todo: temporary.
+func appendPatchMergeIfNotExists(arr []types.PatchStrategicMerge, obj types.PatchStrategicMerge) []types.PatchStrategicMerge {
+	for _, e := range arr {
+		if e == obj {
+			return arr
+		}
+	}
+	return append(arr, obj)
 }

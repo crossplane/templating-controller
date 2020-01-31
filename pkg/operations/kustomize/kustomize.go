@@ -22,7 +22,6 @@ import (
 	"path/filepath"
 
 	"github.com/pkg/errors"
-
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/kustomize/api/filesys"
 	"sigs.k8s.io/kustomize/api/krusty"
@@ -158,7 +157,7 @@ func (o *KustomizeEngine) prepareOverlay(k *kustomizeapi.Kustomization, extraFil
 	if err != nil {
 		return "", err
 	}
-	k.Resources = append(k.Resources, relPath)
+	k.Resources = appendIfNotExists(k.Resources, relPath)
 	yamlData, err := yaml.Marshal(k)
 	if err != nil {
 		return "", err
@@ -172,4 +171,14 @@ func (o *KustomizeEngine) prepareOverlay(k *kustomizeapi.Kustomization, extraFil
 		}
 	}
 	return tempDir, nil
+}
+
+// todo: temporary.
+func appendIfNotExists(arr []string, obj string) []string {
+	for _, e := range arr {
+		if e == obj {
+			return arr
+		}
+	}
+	return append(arr, obj)
 }

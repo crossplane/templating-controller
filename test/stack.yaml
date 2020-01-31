@@ -1,0 +1,32 @@
+---
+apiVersion: stacks.crossplane.io/v1alpha1
+kind: StackDefinition
+metadata:
+  name: template-stack-test
+spec:
+  behavior:
+    reconcile:
+      path: "test/resources" # for running inside the IDE.
+    source:
+      image: crossplaneio/stack-minimal-gcp:latest
+    crd:
+      kind: SampleClaim
+      apiVersion: samples.stacks.crossplane.io/v1alpha1
+    engine:
+      type: kustomize
+      kustomize:
+        overlays:
+        - apiVersion: gcp.crossplane.io/v1alpha3
+          kind: Provider
+          name: gcp-provider
+          bindings:
+            - from: "spec.credentialsSecretRef"
+              to: "spec.credentialsSecretRef"
+            - from: "spec.projectID"
+              to: "spec.projectID"
+        - apiVersion: v1
+          kind: ConfigMap
+          name: gcp-config
+          bindings:
+            - from: "spec.region"
+              to: "data.region"
