@@ -20,6 +20,9 @@ import (
 	"sigs.k8s.io/kustomize/api/types"
 )
 
+// KustomizeOption is used to manipulate default Engine parameters.
+type KustomizeOption func(*Engine)
+
 // A KustomizationPatcher is used to make modifications on Kustomization overlay
 // object before the render.
 type KustomizationPatcher interface {

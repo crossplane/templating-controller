@@ -20,6 +20,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/crossplaneio/templating-controller/pkg/operations/helm3"
+
 	"github.com/crossplaneio/crossplane-runtime/pkg/logging"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -45,6 +47,7 @@ import (
 
 const (
 	KustomizeEngine = "kustomize"
+	Helm3Engine     = "helm3"
 )
 
 var (
@@ -103,8 +106,13 @@ func main() {
 				kustomize.WithResourcePath(*resourceDirInput),
 				kustomize.AdditionalOverlayGenerator(kustomize.NewPatchOverlayGenerator(sd.Spec.Behavior.Engine.Kustomize.Overlays)),
 			)))
+	case Helm3Engine:
+		options = append(options,
+			controllers.WithTemplatingEngine(helm3.NewHelm3Engine(
+				helm3.WithResourcePath(*resourceDirInput)),
+			),
+		)
 	}
-
 	controller := controllers.NewTemplatingReconciler(mgr, gvk, options...)
 	u := &unstructured.Unstructured{}
 	u.SetGroupVersionKind(gvk)
