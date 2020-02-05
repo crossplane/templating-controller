@@ -16,6 +16,6 @@ limitations under the License.
 package kustomize
 
 var (
-	_ KustomizationPatcher = NamePrefixer{}
-	_ KustomizationPatcher = NamespaceNamePrefixer{}
+	_ Patcher = NamePrefixer{}
+	_ Patcher = NamespaceNamePrefixer{}
 )

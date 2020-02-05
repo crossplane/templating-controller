@@ -43,15 +43,15 @@ const (
 )
 
 // WithResourcePath allows you to specify a kustomization folder other than default.
-func WithResourcePath(path string) KustomizeOption {
+func WithResourcePath(path string) Option {
 	return func(ko *Engine) {
 		ko.ResourcePath = path
 	}
 }
 
-// AdditionalKustomizationPatcher allows you to append KustomizationPatcher objects
+// AdditionalKustomizationPatcher allows you to append Patcher objects
 // to the patch pipeline.
-func AdditionalKustomizationPatcher(op ...KustomizationPatcher) KustomizeOption {
+func AdditionalKustomizationPatcher(op ...Patcher) Option {
 	return func(ko *Engine) {
 		ko.Patchers = append(ko.Patchers, op...)
 	}
@@ -59,7 +59,7 @@ func AdditionalKustomizationPatcher(op ...KustomizationPatcher) KustomizeOption 
 
 // AdditionalOverlayGenerator allows you to append OverlayGenerator objects
 // to the generation pipeline.
-func AdditionalOverlayGenerator(op ...OverlayGenerator) KustomizeOption {
+func AdditionalOverlayGenerator(op ...OverlayGenerator) Option {
 	return func(ko *Engine) {
 		ko.OverlayGenerators = append(ko.OverlayGenerators, op...)
 	}
@@ -67,9 +67,9 @@ func AdditionalOverlayGenerator(op ...OverlayGenerator) KustomizeOption {
 
 // NewKustomizeEngine returns a Engine object. rootPath should
 // point to the folder where your base kustomization.yaml resides and patcher
-// is the chain of KustomizationPatcher that makes modifications of Kustomization
+// is the chain of Patcher that makes modifications of Kustomization
 // object.
-func NewKustomizeEngine(k *kustomizeapi.Kustomization, opt ...KustomizeOption) *Engine {
+func NewKustomizeEngine(k *kustomizeapi.Kustomization, opt ...Option) *Engine {
 	ko := &Engine{
 		ResourcePath:  defaultRootPath,
 		Kustomization: k,
