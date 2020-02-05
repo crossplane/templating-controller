@@ -116,7 +116,7 @@ func (la LabelPropagator) Patch(cr resource.ParentResource, k *types.Kustomizati
 }
 
 // NewPatchOverlayGenerator returns a new PatchOverlayGenerator.
-func NewPatchOverlayGenerator(overlays []v1alpha1.ResourceEngineOverlay) PatchOverlayGenerator {
+func NewPatchOverlayGenerator(overlays []v1alpha1.KustomizeEngineOverlay) PatchOverlayGenerator {
 	return PatchOverlayGenerator{
 		Overlays: overlays,
 	}
@@ -125,7 +125,7 @@ func NewPatchOverlayGenerator(overlays []v1alpha1.ResourceEngineOverlay) PatchOv
 // NamePrefixer adds the name of the ParentResource as name prefix to be used
 // in Kustomize.
 type PatchOverlayGenerator struct {
-	Overlays []v1alpha1.ResourceEngineOverlay
+	Overlays []v1alpha1.KustomizeEngineOverlay
 }
 
 func (pog PatchOverlayGenerator) Generate(cr resource.ParentResource, k *types.Kustomization) ([]OverlayFile, error) {

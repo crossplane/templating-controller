@@ -2,10 +2,8 @@ module github.com/crossplaneio/templating-controller
 
 go 1.13
 
-replace github.com/crossplaneio/crossplane => github.com/suskin/crossplane v0.2.1-0.20200130230013-f513309cdebb
-
 require (
-	github.com/crossplaneio/crossplane v0.7.0
+	github.com/crossplaneio/crossplane v0.7.0-rc.0.20200205022519-92f47f2e568a
 	github.com/crossplaneio/crossplane-runtime v0.4.0
 	github.com/google/go-cmp v0.3.1
 	github.com/pkg/errors v0.8.1
