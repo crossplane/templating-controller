@@ -5,6 +5,7 @@ metadata:
   creationTimestamp: null
   name: sampleclaims.samples.stacks.crossplane.io
 spec:
+  preserveUnknownFields: true
   group: samples.stacks.crossplane.io
   names:
     kind: SampleClaim

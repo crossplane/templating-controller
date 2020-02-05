@@ -61,6 +61,7 @@ func main() {
 		resourceDirInput              = app.Flag("resources-dir", "Directory of the resources to be fetched as input to the templating engine").Required().ExistingDir()
 		debugInput                    = app.Flag("debug", "Enable debug logging").Bool()
 	)
+	kingpin.MustParse(app.Parse(os.Args[1:]))
 
 	kingpin.FatalIfError(clientgoscheme.AddToScheme(scheme), "could not register client-go scheme")
 	kingpin.FatalIfError(stacks.AddToScheme(scheme), "could not register stacks group scheme")
