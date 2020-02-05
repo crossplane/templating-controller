@@ -20,6 +20,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/crossplaneio/crossplane-runtime/pkg/logging"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
 	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/yaml.v2"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -53,59 +56,64 @@ func main() {
 		// top level app definition
 		app = kingpin.New(filepath.Base(os.Args[0]), "Templating controller for Crossplane Template Stacks.").DefaultEnvars()
 
-		// The default controller mode.
-		controllerCmd                 = app.Command(filepath.Base(os.Args[0]), "Templating controller for Crossplane Template Stacks.").Default()
-		stackDefinitionNameInput      = controllerCmd.Flag("stack-definition-name", "Name of the StackDefinition custom resource.").Required().String()
-		stackDefinitionNamespaceInput = controllerCmd.Flag("stack-definition-namespace", "Namespace of the StackDefinition custom resource").String()
-		resourceDirInput              = controllerCmd.Flag("resources-dir", "Directory of the resources to be fetched as input to the templating engine").Required().ExistingDir()
+		stackDefinitionNameInput      = app.Flag("stack-definition-name", "Name of the StackDefinition custom resource.").Required().String()
+		stackDefinitionNamespaceInput = app.Flag("stack-definition-namespace", "Namespace of the StackDefinition custom resource").String()
+		resourceDirInput              = app.Flag("resources-dir", "Directory of the resources to be fetched as input to the templating engine").Required().ExistingDir()
+		debugInput                    = app.Flag("debug", "Enable debug logging").Bool()
 	)
-	cmd := kingpin.MustParse(app.Parse(os.Args[1:]))
 
 	kingpin.FatalIfError(clientgoscheme.AddToScheme(scheme), "could not register client-go scheme")
 	kingpin.FatalIfError(stacks.AddToScheme(scheme), "could not register stacks group scheme")
 
-	switch cmd {
-	case controllerCmd.FullCommand():
-		mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-			Scheme: scheme,
-			Port:   9443,
-		})
-		kingpin.FatalIfError(err, "unable to start manager")
-		sd := &v1alpha1.StackDefinition{
-			ObjectMeta: v1.ObjectMeta{
-				Name:      *stackDefinitionNameInput,
-				Namespace: *stackDefinitionNamespaceInput,
-			},
-		}
-		kingpin.FatalIfError(getStackDefinition(sd), "could not fetch the StackDefinition object")
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		Scheme: scheme,
+		Port:   9443,
+	})
+	kingpin.FatalIfError(err, "unable to start manager")
 
-		var options []controllers.TemplatingReconcilerOption
-		switch sd.Spec.Behavior.Engine.Type {
-		case KustomizeEngine:
-			// TODO(muvaf): investigate a better way to convert *Unstructured to *Kustomization.
-			kustomizationYAML, err := yaml.Marshal(sd.Spec.Behavior.Engine.Kustomize.Kustomization)
-			kingpin.FatalIfError(err, "cannot marshal kustomization object")
-			kustomization := &kustomizeapi.Kustomization{}
-			kingpin.FatalIfError(yaml.Unmarshal(kustomizationYAML, kustomization), "cannot unmarshal into kustomization object")
-			options = append(options,
-				controllers.WithTemplatingEngine(kustomize.NewKustomizeEngine(kustomization,
-					kustomize.WithResourcePath(*resourceDirInput),
-					kustomize.AdditionalOverlayGenerator(kustomize.NewPatchOverlayGenerator(sd.Spec.Behavior.Engine.Kustomize.Overlays)),
-				)))
-		}
-
-		gvk := schema.FromAPIVersionAndKind(sd.Spec.Behavior.CRD.APIVersion, sd.Spec.Behavior.CRD.Kind)
-		controller := controllers.NewTemplatingReconciler(mgr, gvk, options...)
-		u := &unstructured.Unstructured{}
-		u.SetGroupVersionKind(gvk)
-		kingpin.FatalIfError(
-			ctrl.NewControllerManagedBy(mgr).
-				For(u).
-				Complete(controller),
-			"could not create controller",
-		)
-		kingpin.FatalIfError(mgr.Start(ctrl.SetupSignalHandler()), "unable to run the manager")
+	sd := &v1alpha1.StackDefinition{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      *stackDefinitionNameInput,
+			Namespace: *stackDefinitionNamespaceInput,
+		},
 	}
+	kingpin.FatalIfError(getStackDefinition(sd), "could not fetch the StackDefinition object")
+	gvk := schema.FromAPIVersionAndKind(sd.Spec.Behavior.CRD.APIVersion, sd.Spec.Behavior.CRD.Kind)
+
+	zl := zap.New(zap.UseDevMode(*debugInput))
+	if *debugInput {
+		// The controller-runtime runs with a no-op logger by default. It is
+		// *very* verbose even at info level, so we only provide it a real
+		// logger when we're running in debug mode.
+		ctrl.SetLogger(zl)
+	}
+	options := []controllers.TemplatingReconcilerOption{
+		controllers.WithLogger(logging.NewLogrLogger(zl.WithName(gvk.GroupKind().String()))),
+	}
+	switch sd.Spec.Behavior.Engine.Type {
+	case KustomizeEngine:
+		// TODO(muvaf): investigate a better way to convert *Unstructured to *Kustomization.
+		kustomizationYAML, err := yaml.Marshal(sd.Spec.Behavior.Engine.Kustomize.Kustomization)
+		kingpin.FatalIfError(err, "cannot marshal kustomization object")
+		kustomization := &kustomizeapi.Kustomization{}
+		kingpin.FatalIfError(yaml.Unmarshal(kustomizationYAML, kustomization), "cannot unmarshal into kustomization object")
+		options = append(options,
+			controllers.WithTemplatingEngine(kustomize.NewKustomizeEngine(kustomization,
+				kustomize.WithResourcePath(*resourceDirInput),
+				kustomize.AdditionalOverlayGenerator(kustomize.NewPatchOverlayGenerator(sd.Spec.Behavior.Engine.Kustomize.Overlays)),
+			)))
+	}
+
+	controller := controllers.NewTemplatingReconciler(mgr, gvk, options...)
+	u := &unstructured.Unstructured{}
+	u.SetGroupVersionKind(gvk)
+	kingpin.FatalIfError(
+		ctrl.NewControllerManagedBy(mgr).
+			For(u).
+			Complete(controller),
+		"could not create controller",
+	)
+	kingpin.FatalIfError(mgr.Start(ctrl.SetupSignalHandler()), "unable to run the manager")
 }
 
 // TODO: Controller-runtime client doesn't work until manager is started, which

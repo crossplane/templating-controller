@@ -17,7 +17,6 @@ package controllers
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/pkg/errors"
@@ -33,6 +32,7 @@ import (
 	kustomizeapi "sigs.k8s.io/kustomize/api/types"
 
 	"github.com/crossplaneio/crossplane-runtime/apis/core/v1alpha1"
+	"github.com/crossplaneio/crossplane-runtime/pkg/logging"
 	"github.com/crossplaneio/crossplane-runtime/pkg/meta"
 
 	"github.com/crossplaneio/templating-controller/pkg/operations/kustomize"
@@ -78,6 +78,12 @@ func WithLongWait(d time.Duration) TemplatingReconcilerOption {
 	}
 }
 
+func WithLogger(l logging.Logger) TemplatingReconcilerOption {
+	return func(reconciler *TemplatingReconciler) {
+		reconciler.log = l
+	}
+}
+
 func NewTemplatingReconciler(m manager.Manager, of schema.GroupVersionKind, options ...TemplatingReconcilerOption) *TemplatingReconciler {
 	nr := func() resource.ParentResource {
 		u := &unstructured.Unstructured{}
@@ -90,6 +96,7 @@ func NewTemplatingReconciler(m manager.Manager, of schema.GroupVersionKind, opti
 		newParentResource: nr,
 		shortWait:         defaultShortWait,
 		longWait:          defaultLongWait,
+		log:               logging.NewNopLogger(),
 		templatingEngine:  kustomize.NewKustomizeEngine(&kustomizeapi.Kustomization{}),
 		childResourcePatcher: resource.ChildResourcePatcherChain{
 			resource.NewOwnerReferenceAdder(),
@@ -110,6 +117,7 @@ type TemplatingReconciler struct {
 	resourcePath      string
 	shortWait         time.Duration
 	longWait          time.Duration
+	log               logging.Logger
 
 	templatingEngine     resource.TemplatingEngine
 	childResourcePatcher resource.ChildResourcePatcherChain
@@ -134,24 +142,24 @@ func (r *TemplatingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 
 	childResources, err := r.templatingEngine.Run(cr)
 	if err != nil {
-		logErr(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errTemplatingOperation))))
+		r.nonFatalError(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errTemplatingOperation))))
 		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 
 	childResources, err = r.childResourcePatcher.Patch(cr, childResources)
 	if err != nil {
-		logErr(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errChildResourcePatchers))))
+		r.nonFatalError(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errChildResourcePatchers))))
 		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 
 	for _, o := range childResources {
 		if err := Apply(ctx, r.kube, o); err != nil {
-			logErr(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, fmt.Sprintf("%s: %s/%s of type %s", errApply, o.GetName(), o.GetNamespace(), o.GetObjectKind().GroupVersionKind().String())))))
+			r.nonFatalError(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, fmt.Sprintf("%s: %s/%s of type %s", errApply, o.GetName(), o.GetNamespace(), o.GetObjectKind().GroupVersionKind().String())))))
 			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 		}
 	}
 
-	logErr(resource.SetConditions(cr, v1alpha1.ReconcileSuccess()))
+	r.nonFatalError(resource.SetConditions(cr, v1alpha1.ReconcileSuccess()))
 	return ctrl.Result{RequeueAfter: r.longWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 }
 
@@ -175,9 +183,8 @@ func Apply(ctx context.Context, kube client.Client, o resource.ChildResource) er
 	return kube.Patch(ctx, o, client.MergeFrom(existing))
 }
 
-// TODO: temprary.
-func logErr(err error) {
+func (t *TemplatingReconciler) nonFatalError(err error) {
 	if err != nil {
-		log.Print(err.Error())
+		t.log.Info(err.Error())
 	}
 }
