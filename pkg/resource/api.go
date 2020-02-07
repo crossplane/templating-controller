@@ -26,8 +26,8 @@ import (
 	"github.com/crossplaneio/crossplane-runtime/pkg/meta"
 )
 
-const KeepDefaultAnnotationsKey = "resourcepacks.crossplane.io/keep-defaulting-annotations"
-const KeepDefaultAnnotationsTrueValue = "true"
+const RemoveDefaultAnnotationsKey = "templatestacks.crossplane.io/remove-defaulting-annotations"
+const RemoveDefaultAnnotationsTrueValue = "true"
 
 // NewOwnerReferenceAdder returns a new *OwnerReferenceAdder
 func NewOwnerReferenceAdder() OwnerReferenceAdder {
@@ -49,7 +49,7 @@ func (lo OwnerReferenceAdder) Patch(cr ParentResource, list []ChildResource) ([]
 	for _, o := range list {
 		// TODO(muvaf): Provider kind resources are special in the sense that
 		// their deletion should be blocked until all resources provisioned with
-		// them are deleted. Since we let Kubernets garbage collector clean the
+		// them are deleted. Since we let Kubernetes garbage collector clean the
 		// resources, we skip deletion of Provider kind resources for deletions
 		// to success.
 		// Find a way to realize that dependency without bringing in too much
@@ -72,7 +72,7 @@ func NewDefaultingAnnotationRemover() DefaultingAnnotationRemover {
 type DefaultingAnnotationRemover struct{}
 
 func (lo DefaultingAnnotationRemover) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
-	if cr.GetAnnotations()[KeepDefaultAnnotationsKey] == KeepDefaultAnnotationsTrueValue {
+	if cr.GetAnnotations()[RemoveDefaultAnnotationsKey] != RemoveDefaultAnnotationsTrueValue {
 		return list, nil
 	}
 	for _, o := range list {
@@ -81,7 +81,29 @@ func (lo DefaultingAnnotationRemover) Patch(cr ParentResource, list []ChildResou
 	return list, nil
 }
 
-// todo: temp until Provider interface lands on crossplane-runtime.
+// NewNamespacePatcher returns a new NamespacePatcher
+func NewNamespacePatcher() NamespacePatcher {
+	return NamespacePatcher{}
+}
+
+// NamespacePatcher patches the child resources whose metadata.namespace is empty
+// with namespace of the parent resource.
+type NamespacePatcher struct{}
+
+func (lo NamespacePatcher) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
+	if cr.GetNamespace() == "" {
+		return list, nil
+	}
+	for _, o := range list {
+		if o.GetNamespace() == "" {
+			o.SetNamespace(cr.GetNamespace())
+		}
+	}
+	return list, nil
+}
+
+// todo: temp solution to detect provider kind.
 func isProvider(o runtime.Object) bool {
-	return strings.ToLower(o.GetObjectKind().GroupVersionKind().Kind) == "provider"
+	gvk := o.GetObjectKind().GroupVersionKind()
+	return strings.HasSuffix(gvk.Group, "crossplane.io") && strings.ToLower(gvk.Kind) == "provider"
 }

@@ -1,0 +1,3 @@
+domain: crossplane.io
+repo: github.com/crossplaneio/templating-controller
+version: "2"

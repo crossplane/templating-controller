@@ -29,8 +29,8 @@ import (
 	runtimefake "github.com/crossplaneio/crossplane-runtime/pkg/resource/fake"
 	"github.com/crossplaneio/crossplane-runtime/pkg/test"
 
-	"github.com/crossplaneio/resourcepacks/pkg/resource"
-	"github.com/crossplaneio/resourcepacks/pkg/resource/fake"
+	"github.com/crossplaneio/templating-controller/pkg/resource"
+	"github.com/crossplaneio/templating-controller/pkg/resource/fake"
 )
 
 type MockParentResourceOption func(*fake.MockParentResource)
@@ -82,7 +82,7 @@ func TestReconcile(t *testing.T) {
 				Client: tc.kube,
 				Scheme: runtimefake.SchemeWith(&fake.MockParentResource{}),
 			}
-			r := NewResourcePackReconciler(mgr, runtimefake.GVK(&fake.MockParentResource{}))
+			r := NewTemplatingReconciler(mgr, runtimefake.GVK(&fake.MockParentResource{}))
 			_, err := r.Reconcile(reconcile.Request{})
 
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {

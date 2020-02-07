@@ -22,19 +22,21 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	kustomizeapi "sigs.k8s.io/kustomize/api/types"
 
 	"github.com/crossplaneio/crossplane-runtime/apis/core/v1alpha1"
+	"github.com/crossplaneio/crossplane-runtime/pkg/logging"
 	"github.com/crossplaneio/crossplane-runtime/pkg/meta"
-	runtimeresource "github.com/crossplaneio/crossplane-runtime/pkg/resource"
 
-	"github.com/crossplaneio/resourcepacks/pkg/operations/kustomize"
-	"github.com/crossplaneio/resourcepacks/pkg/resource"
+	"github.com/crossplaneio/templating-controller/pkg/operations/kustomize"
+	"github.com/crossplaneio/templating-controller/pkg/resource"
 )
 
 const (
@@ -50,48 +52,56 @@ const (
 	errApply                 = "apply failed"
 )
 
-type ResourcePackReconcilerOption func(*ResourcePackReconciler)
+type TemplatingReconcilerOption func(*TemplatingReconciler)
 
-func AdditionalChildResourcePatcher(op ...resource.ChildResourcePatcher) ResourcePackReconcilerOption {
-	return func(reconciler *ResourcePackReconciler) {
+func AdditionalChildResourcePatcher(op ...resource.ChildResourcePatcher) TemplatingReconcilerOption {
+	return func(reconciler *TemplatingReconciler) {
 		reconciler.childResourcePatcher = append(reconciler.childResourcePatcher, op...)
 	}
 }
 
-func WithTemplatingEngine(eng resource.TemplatingEngine) ResourcePackReconcilerOption {
-	return func(reconciler *ResourcePackReconciler) {
+func WithTemplatingEngine(eng resource.TemplatingEngine) TemplatingReconcilerOption {
+	return func(reconciler *TemplatingReconciler) {
 		reconciler.templatingEngine = eng
 	}
 }
 
-func WithShortWait(d time.Duration) ResourcePackReconcilerOption {
-	return func(reconciler *ResourcePackReconciler) {
+func WithShortWait(d time.Duration) TemplatingReconcilerOption {
+	return func(reconciler *TemplatingReconciler) {
 		reconciler.shortWait = d
 	}
 }
 
-func WithLongWait(d time.Duration) ResourcePackReconcilerOption {
-	return func(reconciler *ResourcePackReconciler) {
+func WithLongWait(d time.Duration) TemplatingReconcilerOption {
+	return func(reconciler *TemplatingReconciler) {
 		reconciler.longWait = d
 	}
 }
 
-func NewResourcePackReconciler(m manager.Manager, of schema.GroupVersionKind, options ...ResourcePackReconcilerOption) *ResourcePackReconciler {
-	nr := func() resource.ParentResource {
-		return runtimeresource.MustCreateObject(schema.GroupVersionKind(of), m.GetScheme()).(resource.ParentResource)
+func WithLogger(l logging.Logger) TemplatingReconcilerOption {
+	return func(reconciler *TemplatingReconciler) {
+		reconciler.log = l
 	}
-	// Early panic if the resource doesn't satisfy ParentResource interface.
-	_ = nr()
+}
 
-	r := &ResourcePackReconciler{
+func NewTemplatingReconciler(m manager.Manager, of schema.GroupVersionKind, options ...TemplatingReconcilerOption) *TemplatingReconciler {
+	nr := func() resource.ParentResource {
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(of)
+		return u
+	}
+
+	r := &TemplatingReconciler{
 		kube:              m.GetClient(),
 		newParentResource: nr,
 		shortWait:         defaultShortWait,
 		longWait:          defaultLongWait,
-		templatingEngine:  kustomize.NewKustomizeEngine(),
+		log:               logging.NewNopLogger(),
+		templatingEngine:  kustomize.NewKustomizeEngine(&kustomizeapi.Kustomization{}),
 		childResourcePatcher: resource.ChildResourcePatcherChain{
-			resource.NewDefaultingAnnotationRemover(),
 			resource.NewOwnerReferenceAdder(),
+			resource.NewDefaultingAnnotationRemover(),
+			resource.NewNamespacePatcher(),
 		},
 	}
 
@@ -101,18 +111,19 @@ func NewResourcePackReconciler(m manager.Manager, of schema.GroupVersionKind, op
 	return r
 }
 
-type ResourcePackReconciler struct {
+type TemplatingReconciler struct {
 	kube              client.Client
 	newParentResource func() resource.ParentResource
 	resourcePath      string
 	shortWait         time.Duration
 	longWait          time.Duration
+	log               logging.Logger
 
 	templatingEngine     resource.TemplatingEngine
 	childResourcePatcher resource.ChildResourcePatcherChain
 }
 
-func (r *ResourcePackReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *TemplatingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), reconcileTimeout)
 	defer cancel()
 
@@ -131,24 +142,24 @@ func (r *ResourcePackReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error
 
 	childResources, err := r.templatingEngine.Run(cr)
 	if err != nil {
-		cr.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errTemplatingOperation)))
+		r.nonFatalError(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errTemplatingOperation))))
 		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 
 	childResources, err = r.childResourcePatcher.Patch(cr, childResources)
 	if err != nil {
-		cr.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, errChildResourcePatchers)))
+		r.nonFatalError(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errChildResourcePatchers))))
 		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 
 	for _, o := range childResources {
 		if err := Apply(ctx, r.kube, o); err != nil {
-			cr.SetConditions(v1alpha1.ReconcileError(errors.Wrap(err, fmt.Sprintf("%s: %s/%s of type %s", errApply, o.GetName(), o.GetNamespace(), o.GetObjectKind().GroupVersionKind().String()))))
+			r.nonFatalError(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, fmt.Sprintf("%s: %s/%s of type %s", errApply, o.GetName(), o.GetNamespace(), o.GetObjectKind().GroupVersionKind().String())))))
 			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 		}
 	}
 
-	cr.SetConditions(v1alpha1.ReconcileSuccess())
+	r.nonFatalError(resource.SetConditions(cr, v1alpha1.ReconcileSuccess()))
 	return ctrl.Result{RequeueAfter: r.longWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 }
 
@@ -170,4 +181,10 @@ func Apply(ctx context.Context, kube client.Client, o resource.ChildResource) er
 	// ResourceVersion.
 	o.SetResourceVersion(existing.GetResourceVersion())
 	return kube.Patch(ctx, o, client.MergeFrom(existing))
+}
+
+func (t *TemplatingReconciler) nonFatalError(err error) {
+	if err != nil {
+		t.log.Info(err.Error())
+	}
 }

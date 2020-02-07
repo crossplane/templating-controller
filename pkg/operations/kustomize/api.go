@@ -18,11 +18,17 @@ package kustomize
 
 import (
 	"fmt"
+	"strings"
 
-	"github.com/crossplaneio/resourcepacks/pkg/resource"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/kustomize/api/resid"
 	"sigs.k8s.io/kustomize/api/types"
+	"sigs.k8s.io/yaml"
+
+	"github.com/crossplaneio/crossplane/apis/stacks/v1alpha1"
+
+	"github.com/crossplaneio/templating-controller/pkg/resource"
 )
 
 // NewNamePrefixer returns a new *NamePrefixer.
@@ -107,4 +113,71 @@ func (la LabelPropagator) Patch(cr resource.ParentResource, k *types.Kustomizati
 		k.CommonLabels[key] = val
 	}
 	return nil
+}
+
+// NewPatchOverlayGenerator returns a new PatchOverlayGenerator.
+func NewPatchOverlayGenerator(overlays []v1alpha1.KustomizeEngineOverlay) PatchOverlayGenerator {
+	return PatchOverlayGenerator{
+		Overlays: overlays,
+	}
+}
+
+// NamePrefixer adds the name of the ParentResource as name prefix to be used
+// in Kustomize.
+type PatchOverlayGenerator struct {
+	Overlays []v1alpha1.KustomizeEngineOverlay
+}
+
+func (pog PatchOverlayGenerator) Generate(cr resource.ParentResource, k *types.Kustomization) ([]OverlayFile, error) {
+	if len(pog.Overlays) == 0 {
+		return nil, nil
+	}
+	finalOverlayYAML := ""
+	for _, overlay := range pog.Overlays {
+		obj := &unstructured.Unstructured{}
+		obj.SetAPIVersion(overlay.APIVersion)
+		obj.SetKind(overlay.Kind)
+		obj.SetName(overlay.Name)
+		// todo: stackdefinition does not support namespace yet.
+		// obj.SetNamespace(overlay.Namespace)
+
+		for _, binding := range overlay.Bindings {
+			// First make sure there is a value in the referred path.
+			val, exists, err := unstructured.NestedFieldCopy(cr.UnstructuredContent(), strings.Split(binding.From, ".")...)
+			if err != nil {
+				return nil, err
+			}
+			if !exists {
+				continue
+			}
+			if err := unstructured.SetNestedField(obj.Object, val, strings.Split(binding.To, ".")...); err != nil {
+				return nil, err
+			}
+		}
+		overlayYAML, err := yaml.Marshal(obj)
+		if err != nil {
+			return nil, err
+		}
+		// TODO(muvaf): yaml.Marshal does not support outputting multiple YAML
+		// documents. That's temporary solution.
+		finalOverlayYAML = fmt.Sprintf("%s---\n%s", finalOverlayYAML, string(overlayYAML))
+	}
+	fileName := "overlaypatch.yaml"
+	k.PatchesStrategicMerge = appendPatchMergeIfNotExists(k.PatchesStrategicMerge, types.PatchStrategicMerge(fileName))
+	return []OverlayFile{
+		{
+			Name: fileName,
+			Data: []byte(finalOverlayYAML),
+		},
+	}, nil
+}
+
+// todo: temporary.
+func appendPatchMergeIfNotExists(arr []types.PatchStrategicMerge, obj types.PatchStrategicMerge) []types.PatchStrategicMerge {
+	for _, e := range arr {
+		if e == obj {
+			return arr
+		}
+	}
+	return append(arr, obj)
 }
