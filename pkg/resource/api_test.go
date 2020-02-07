@@ -18,4 +18,8 @@ package resource
 
 var (
 	_ ChildResourcePatcher = OwnerReferenceAdder{}
+	_ ChildResourcePatcher = DefaultingAnnotationRemover{}
+	_ ChildResourcePatcher = NamespacePatcher{}
+	_ ChildResourcePatcher = LabelPropagator{}
+	_ ChildResourcePatcher = ParentLabelSetAdder{}
 )

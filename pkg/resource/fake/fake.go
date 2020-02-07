@@ -53,6 +53,10 @@ func (m *MockParentResource) UnstructuredContent() map[string]interface{} {
 	return nil
 }
 
+func (m *MockParentResource) GroupVersionKind() schema.GroupVersionKind {
+	return m.GetObjectKind().GroupVersionKind()
+}
+
 type MockChildResource struct {
 	metav1.ObjectMeta
 }

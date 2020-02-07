@@ -24,10 +24,13 @@ import (
 
 	"github.com/crossplaneio/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplaneio/crossplane-runtime/pkg/meta"
+	"github.com/crossplaneio/crossplane/pkg/stacks"
 )
 
-const RemoveDefaultAnnotationsKey = "templatestacks.crossplane.io/remove-defaulting-annotations"
-const RemoveDefaultAnnotationsTrueValue = "true"
+const (
+	RemoveDefaultAnnotationsKey       = "templatestacks.crossplane.io/remove-defaulting-annotations"
+	RemoveDefaultAnnotationsTrueValue = "true"
+)
 
 // NewOwnerReferenceAdder returns a new *OwnerReferenceAdder
 func NewOwnerReferenceAdder() OwnerReferenceAdder {
@@ -68,7 +71,7 @@ func NewDefaultingAnnotationRemover() DefaultingAnnotationRemover {
 }
 
 // DefaultingAnnotationRemover removes the defaulting annotation on the resources
-// if not explicitly specified otherwise.
+// if it is requested through the special annotation.
 type DefaultingAnnotationRemover struct{}
 
 func (lo DefaultingAnnotationRemover) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
@@ -98,6 +101,38 @@ func (lo NamespacePatcher) Patch(cr ParentResource, list []ChildResource) ([]Chi
 		if o.GetNamespace() == "" {
 			o.SetNamespace(cr.GetNamespace())
 		}
+	}
+	return list, nil
+}
+
+// NewLabelPropagator returns a new LabelPropagator
+func NewLabelPropagator() LabelPropagator {
+	return LabelPropagator{}
+}
+
+// LabelPropagator propagates all the labels that the parent resource has down
+// to all child resources.
+type LabelPropagator struct{}
+
+func (lo LabelPropagator) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
+	for _, o := range list {
+		meta.AddLabels(o, cr.GetLabels())
+	}
+	return list, nil
+}
+
+// NewParentLabelSetAdder returns a new ParentLabelSetAdder
+func NewParentLabelSetAdder() ParentLabelSetAdder {
+	return ParentLabelSetAdder{}
+}
+
+// ParentLabelSetAdder adds parent labels to the child resources.
+// See https://github.com/crossplaneio/crossplane/blob/master/design/one-pager-stack-relationship-labels.md
+type ParentLabelSetAdder struct{}
+
+func (lo ParentLabelSetAdder) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
+	for _, o := range list {
+		meta.AddLabels(o, stacks.ParentLabels(cr))
 	}
 	return list, nil
 }

@@ -102,6 +102,8 @@ func NewTemplatingReconciler(m manager.Manager, of schema.GroupVersionKind, opti
 			resource.NewOwnerReferenceAdder(),
 			resource.NewDefaultingAnnotationRemover(),
 			resource.NewNamespacePatcher(),
+			resource.NewLabelPropagator(),
+			resource.NewParentLabelSetAdder(),
 		},
 	}
 
