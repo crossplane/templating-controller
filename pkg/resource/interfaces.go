@@ -19,6 +19,7 @@ package resource
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // ParentResource should be satisfied by the stack CRD that would like to use
@@ -28,6 +29,7 @@ type ParentResource interface {
 	metav1.Object
 
 	UnstructuredContent() map[string]interface{}
+	GroupVersionKind() schema.GroupVersionKind
 }
 
 // ChildResource is satisfied by all Kubernetes objects that the stack may want

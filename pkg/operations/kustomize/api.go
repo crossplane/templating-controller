@@ -89,32 +89,6 @@ func (np NamespaceNamePrefixer) Patch(cr resource.ParentResource, k *types.Kusto
 	return nil
 }
 
-// NewLabelPropagator returns a *LabelPropagator
-func NewLabelPropagator() LabelPropagator {
-	return LabelPropagator{}
-}
-
-// LabelPropagator copies all labels of ParentResource to commonLabels of
-// Kustomization object so that all rendered resources have those labels.
-// It also adds name, namespace(if exists) and uid of the parent resource to the
-// commonLabels property.
-type LabelPropagator struct{}
-
-func (la LabelPropagator) Patch(cr resource.ParentResource, k *types.Kustomization) error {
-	if k.CommonLabels == nil {
-		k.CommonLabels = map[string]string{}
-	}
-	if cr.GetNamespace() != "" {
-		k.CommonLabels[fmt.Sprintf("%s/namespace", cr.GetObjectKind().GroupVersionKind().Group)] = cr.GetName()
-	}
-	k.CommonLabels[fmt.Sprintf("%s/name", cr.GetObjectKind().GroupVersionKind().Group)] = cr.GetName()
-	k.CommonLabels[fmt.Sprintf("%s/uid", cr.GetObjectKind().GroupVersionKind().Group)] = string(cr.GetUID())
-	for key, val := range cr.GetLabels() {
-		k.CommonLabels[key] = val
-	}
-	return nil
-}
-
 // NewPatchOverlayGenerator returns a new PatchOverlayGenerator.
 func NewPatchOverlayGenerator(overlays []v1alpha1.KustomizeEngineOverlay) PatchOverlayGenerator {
 	return PatchOverlayGenerator{

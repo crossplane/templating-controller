@@ -68,11 +68,8 @@ github.com/coreos/pkg v0.0.0-20180108230652-97fdf19511ea/go.mod h1:E3G3o1h8I7cfc
 github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f/go.mod h1:E3G3o1h8I7cfcXa63jLwjI0eiQQMgzzUDFVpN/nH/eA=
 github.com/cpuguy83/go-md2man v1.0.10/go.mod h1:SmD6nW6nTyfqj6ABTjUi3V3JVMnlJmwcJI5acqYI6dE=
 github.com/creack/pty v1.1.7/go.mod h1:lj5s0c3V2DBrqTV7llrYr5NG6My20zk30Fl46Y7DoTY=
-github.com/crossplaneio/crossplane v0.7.0-rc.0.20200205022519-92f47f2e568a h1:vtqyPU/K3n4mx808FjBlxdBALnhWuKg3ZamuGKUeFjA=
-github.com/crossplaneio/crossplane v0.7.0-rc.0.20200205022519-92f47f2e568a/go.mod h1:rTeJGonGZuzi5HXq9FsXKn2Uh7Pbo7UgsfvQOrcG704=
-github.com/crossplaneio/crossplane v0.7.0/go.mod h1:rTeJGonGZuzi5HXq9FsXKn2Uh7Pbo7UgsfvQOrcG704=
-github.com/crossplaneio/crossplane-runtime v0.4.0 h1:uw8g7KY0isnJEcUzJv+r6IGIRDhwspbemL/d183n0CE=
-github.com/crossplaneio/crossplane-runtime v0.4.0/go.mod h1:UTemZ8u+bvHkQMHpdsZ2z/dTHC7tRkXc2K6Z9N26KQI=
+github.com/crossplaneio/crossplane v0.7.0-rc.0.20200206230838-4534223ff95e h1:Mi6MAjvtaHADwbgzgerZMV0roO5PU1wlpOVHQruw7ng=
+github.com/crossplaneio/crossplane v0.7.0-rc.0.20200206230838-4534223ff95e/go.mod h1:w1DahP4gWrRfZgRDc4jKLZsA3vyRLOmBevk03xdW/5g=
 github.com/crossplaneio/crossplane-runtime v0.4.1-0.20200201005410-a6bb086be888 h1:vO/7jO4Vz1+1IxNximywy5Sr/dj5vwFKhii9x4pyz+Q=
 github.com/crossplaneio/crossplane-runtime v0.4.1-0.20200201005410-a6bb086be888/go.mod h1:97hx6LIBkjI0fjfMGPRCOGI7Pm6qUhoN9zTCWrP4XvU=
 github.com/crossplaneio/crossplane-tools v0.0.0-20191220202319-9033bd8a02ce/go.mod h1:fzQeWDvZvzaC4N8vPjTubQocGnwzQ4cuZM6949+T43U=
@@ -106,6 +103,7 @@ github.com/fatih/color v1.7.0/go.mod h1:Zm6kSWBoL9eyXnKyktHP6abPY2pDugNf5Kwzbycv
 github.com/fsnotify/fsnotify v1.4.7 h1:IXs+QLmnXW2CcXuY+8Mzv/fWEsPGWxqefPtCP5CnV9I=
 github.com/fsnotify/fsnotify v1.4.7/go.mod h1:jwhsz4b93w/PPRr/qN1Yymfu8t87LnFCMoQvtojpjFo=
 github.com/ghodss/yaml v0.0.0-20150909031657-73d445a93680/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=
+github.com/ghodss/yaml v1.0.0 h1:wQHKEahhL6wmXdzwWG11gIVCkOv05bNOh+Rxn0yngAk=
 github.com/ghodss/yaml v1.0.0/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=
 github.com/globalsign/mgo v0.0.0-20180905125535-1ca0a4f7cbcb/go.mod h1:xkRDCp4j0OGD1HRkm4kmhM+pmpv3AKq5SU7GMg4oO/Q=
 github.com/globalsign/mgo v0.0.0-20181015135952-eeefdecb41b8/go.mod h1:xkRDCp4j0OGD1HRkm4kmhM+pmpv3AKq5SU7GMg4oO/Q=
@@ -415,6 +413,7 @@ github.com/soheilhy/cmux v0.1.4/go.mod h1:IM3LyeVVIOuxMH7sFAkER9+bJ4dT7Ms6E4xg4k
 github.com/sourcegraph/go-diff v0.5.1/go.mod h1:j2dHj3m8aZgQO8lMTcTnBcXkRRRqi34cd2MNlA9u1mE=
 github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 github.com/spf13/afero v1.1.2/go.mod h1:j4pytiNVoe2o6bmDsKpLACNPDBIoEAkihy7loJ1B0CQ=
+github.com/spf13/afero v1.2.2 h1:5jhuqJyZCZf2JRofRvN/nIFgIWNzPa3/Vz8mYylgbWc=
 github.com/spf13/afero v1.2.2/go.mod h1:9ZxEEn6pIJ8Rxe320qSDBk6AsU0r9pR7Q4OcevTdifk=
 github.com/spf13/cast v1.3.0/go.mod h1:Qx5cxh0v+4UWYiBimWS+eyWzqEqokIECu5etghLkUJE=
 github.com/spf13/cobra v0.0.5/go.mod h1:3K3wKZymM7VvHMDS9+Akkh4K60UwM26emMESw8tLCHU=
@@ -433,8 +432,6 @@ github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXf
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
 github.com/stretchr/testify v1.4.0 h1:2E4SXV/wtOkTonXsotYi4li6zVWxYlZuYNCXe9XRJyk=
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
-github.com/suskin/crossplane v0.2.1-0.20200130230013-f513309cdebb h1:itIC2je0Imfe5cQMhCo9AZS679bHG9MVwd1Ahds7TK0=
-github.com/suskin/crossplane v0.2.1-0.20200130230013-f513309cdebb/go.mod h1:4nExuWZ+hF7NTBKC6KvjtuEkudB3aULNJXmLiL8cK9U=
 github.com/timakin/bodyclose v0.0.0-20190721030226-87058b9bfcec/go.mod h1:Qimiffbc6q9tBWlVV6x0P9sat/ao1xEkREYPPj9hphk=
 github.com/timakin/bodyclose v0.0.0-20190930140734-f7f2e9bca95e/go.mod h1:Qimiffbc6q9tBWlVV6x0P9sat/ao1xEkREYPPj9hphk=
 github.com/tmc/grpc-websocket-proxy v0.0.0-20170815181823-89b8d40f7ca8/go.mod h1:ncp9v5uamzpCO7NfCPTXjqaC+bZgJeR0sMTm6dMHP7U=

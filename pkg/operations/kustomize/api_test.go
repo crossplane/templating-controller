@@ -18,5 +18,4 @@ package kustomize
 var (
 	_ KustomizationPatcher = NamePrefixer{}
 	_ KustomizationPatcher = NamespaceNamePrefixer{}
-	_ KustomizationPatcher = LabelPropagator{}
 )
