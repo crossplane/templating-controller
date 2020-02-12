@@ -10,7 +10,6 @@ require (
 	golang.org/x/net v0.0.0-20191028085509-fe3aa8a45271
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/yaml.v2 v2.2.4
-	gopkg.in/yaml.v3 v3.0.0-20190905181640-827449938966
 	helm.sh/helm/v3 v3.0.0-20200205083830-5ec70ab27fbf
 	k8s.io/api v0.17.2
 	k8s.io/apiextensions-apiserver v0.17.2

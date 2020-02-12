@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/json"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -175,14 +176,11 @@ func Apply(ctx context.Context, kube client.Client, o resource.ChildResource) er
 	if err != nil {
 		return err
 	}
-	// NOTE(muvaf): Patch call asks client.MergeFrom object to calculate the patch
-	// between the runtime.Object in Patch call and the one that client.MergeFrom
-	// has. When you do a Patch, the expected flow is that `o` and `existing` are
-	// copy of each other but the only difference is that `o` has the overlay changes.
-	// But in our case, `o` is not retrieved from api-server, hence does not have
-	// ResourceVersion.
-	o.SetResourceVersion(existing.GetResourceVersion())
-	return kube.Patch(ctx, o, client.MergeFrom(existing))
+	patchJSON, err := json.Marshal(o)
+	if err != nil {
+		return err
+	}
+	return kube.Patch(ctx, existing, client.ConstantPatch(types.MergePatchType, patchJSON))
 }
 
 func (t *TemplatingReconciler) nonFatalError(err error) {

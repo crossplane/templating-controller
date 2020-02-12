@@ -20,15 +20,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
-
-	"github.com/crossplaneio/templating-controller/pkg/operations/helm3"
-
-	"github.com/crossplaneio/crossplane-runtime/pkg/logging"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
 	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/yaml.v2"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,12 +32,15 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	kustomizeapi "sigs.k8s.io/kustomize/api/types"
 
+	"github.com/crossplaneio/crossplane-runtime/pkg/logging"
 	"github.com/crossplaneio/crossplane/apis/stacks"
 	"github.com/crossplaneio/crossplane/apis/stacks/v1alpha1"
 
 	"github.com/crossplaneio/templating-controller/pkg/controllers"
+	"github.com/crossplaneio/templating-controller/pkg/operations/helm3"
 	"github.com/crossplaneio/templating-controller/pkg/operations/kustomize"
 )
 
