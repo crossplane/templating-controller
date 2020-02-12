@@ -20,6 +20,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
+
 	"github.com/crossplaneio/templating-controller/pkg/operations/helm3"
 
 	"github.com/crossplaneio/crossplane-runtime/pkg/logging"
@@ -65,16 +67,6 @@ func main() {
 		debugInput                    = app.Flag("debug", "Enable debug logging").Bool()
 	)
 	kingpin.MustParse(app.Parse(os.Args[1:]))
-
-	kingpin.FatalIfError(clientgoscheme.AddToScheme(scheme), "could not register client-go scheme")
-	kingpin.FatalIfError(stacks.AddToScheme(scheme), "could not register stacks group scheme")
-
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme: scheme,
-		Port:   9443,
-	})
-	kingpin.FatalIfError(err, "unable to start manager")
-
 	sd := &v1alpha1.StackDefinition{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      *stackDefinitionNameInput,
@@ -83,6 +75,25 @@ func main() {
 	}
 	kingpin.FatalIfError(getStackDefinition(sd), "could not fetch the StackDefinition object")
 	gvk := schema.FromAPIVersionAndKind(sd.Spec.Behavior.CRD.APIVersion, sd.Spec.Behavior.CRD.Kind)
+
+	kingpin.FatalIfError(clientgoscheme.AddToScheme(scheme), "could not register client-go scheme")
+	kingpin.FatalIfError(stacks.AddToScheme(scheme), "could not register stacks group scheme")
+
+	mgrOptions := ctrl.Options{
+		Scheme: scheme,
+		Port:   9443,
+	}
+	// TODO(muvaf): This should be a flag but deployment generation happens in
+	// unpack step which doesn't have information about namespace. So, we have to
+	// fetch all this from StackDefinition's fields that are not part of behavior.
+	if sd.Spec.PermissionScope == string(apiextensions.NamespaceScoped) {
+		if mgrOptions.Namespace = sd.GetNamespace(); mgrOptions.Namespace == "" {
+			kingpin.FatalUsage("Scope is chosen as %s but StackDefinition object does not have a namespace", sd.Spec.PermissionScope)
+		}
+	}
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), mgrOptions)
+	kingpin.FatalIfError(err, "unable to start manager")
 
 	zl := zap.New(zap.UseDevMode(*debugInput))
 	if *debugInput {

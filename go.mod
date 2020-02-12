@@ -13,6 +13,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20190905181640-827449938966
 	helm.sh/helm/v3 v3.0.0-20200205083830-5ec70ab27fbf
 	k8s.io/api v0.17.2
+	k8s.io/apiextensions-apiserver v0.17.2
 	k8s.io/apimachinery v0.17.2
 	k8s.io/client-go v0.17.2
 	sigs.k8s.io/controller-runtime v0.4.0
