@@ -20,11 +20,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/crossplaneio/crossplane-runtime/pkg/logging"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
 	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/yaml.v2"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,17 +32,21 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	kustomizeapi "sigs.k8s.io/kustomize/api/types"
 
+	"github.com/crossplaneio/crossplane-runtime/pkg/logging"
 	"github.com/crossplaneio/crossplane/apis/stacks"
 	"github.com/crossplaneio/crossplane/apis/stacks/v1alpha1"
 
 	"github.com/crossplaneio/templating-controller/pkg/controllers"
+	"github.com/crossplaneio/templating-controller/pkg/operations/helm3"
 	"github.com/crossplaneio/templating-controller/pkg/operations/kustomize"
 )
 
 const (
 	KustomizeEngine = "kustomize"
+	Helm3Engine     = "helm3"
 )
 
 var (
@@ -62,16 +64,6 @@ func main() {
 		debugInput                    = app.Flag("debug", "Enable debug logging").Bool()
 	)
 	kingpin.MustParse(app.Parse(os.Args[1:]))
-
-	kingpin.FatalIfError(clientgoscheme.AddToScheme(scheme), "could not register client-go scheme")
-	kingpin.FatalIfError(stacks.AddToScheme(scheme), "could not register stacks group scheme")
-
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme: scheme,
-		Port:   9443,
-	})
-	kingpin.FatalIfError(err, "unable to start manager")
-
 	sd := &v1alpha1.StackDefinition{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      *stackDefinitionNameInput,
@@ -80,6 +72,25 @@ func main() {
 	}
 	kingpin.FatalIfError(getStackDefinition(sd), "could not fetch the StackDefinition object")
 	gvk := schema.FromAPIVersionAndKind(sd.Spec.Behavior.CRD.APIVersion, sd.Spec.Behavior.CRD.Kind)
+
+	kingpin.FatalIfError(clientgoscheme.AddToScheme(scheme), "could not register client-go scheme")
+	kingpin.FatalIfError(stacks.AddToScheme(scheme), "could not register stacks group scheme")
+
+	mgrOptions := ctrl.Options{
+		Scheme: scheme,
+		Port:   9443,
+	}
+	// TODO(muvaf): This should be a flag but deployment generation happens in
+	// unpack step which doesn't have information about namespace. So, we have to
+	// fetch all this from StackDefinition's fields that are not part of behavior.
+	if sd.Spec.PermissionScope == string(apiextensions.NamespaceScoped) {
+		if mgrOptions.Namespace = sd.GetNamespace(); mgrOptions.Namespace == "" {
+			kingpin.FatalUsage("Scope is chosen as %s but StackDefinition object does not have a namespace", sd.Spec.PermissionScope)
+		}
+	}
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), mgrOptions)
+	kingpin.FatalIfError(err, "unable to start manager")
 
 	zl := zap.New(zap.UseDevMode(*debugInput))
 	if *debugInput {
@@ -103,8 +114,15 @@ func main() {
 				kustomize.WithResourcePath(*resourceDirInput),
 				kustomize.AdditionalOverlayGenerator(kustomize.NewPatchOverlayGenerator(sd.Spec.Behavior.Engine.Kustomize.Overlays)),
 			)))
+	case Helm3Engine:
+		options = append(options,
+			controllers.WithTemplatingEngine(helm3.NewHelm3Engine(
+				helm3.WithResourcePath(*resourceDirInput)),
+			),
+		)
+	default:
+		kingpin.FatalUsage("the engine type %s is not supported", sd.Spec.Behavior.Engine.Type)
 	}
-
 	controller := controllers.NewTemplatingReconciler(mgr, gvk, options...)
 	u := &unstructured.Unstructured{}
 	u.SetGroupVersionKind(gvk)

@@ -42,38 +42,35 @@ const (
 	errKustomizeCall      = "kustomize call failed"
 )
 
-// KustomizeOption is used to manipulate default KustomizeEngine parameters.
-type KustomizeOption func(*KustomizeEngine)
-
 // WithResourcePath allows you to specify a kustomization folder other than default.
-func WithResourcePath(path string) KustomizeOption {
-	return func(ko *KustomizeEngine) {
+func WithResourcePath(path string) Option {
+	return func(ko *Engine) {
 		ko.ResourcePath = path
 	}
 }
 
-// AdditionalKustomizationPatcher allows you to append KustomizationPatcher objects
+// AdditionalKustomizationPatcher allows you to append Patcher objects
 // to the patch pipeline.
-func AdditionalKustomizationPatcher(op ...KustomizationPatcher) KustomizeOption {
-	return func(ko *KustomizeEngine) {
+func AdditionalKustomizationPatcher(op ...Patcher) Option {
+	return func(ko *Engine) {
 		ko.Patchers = append(ko.Patchers, op...)
 	}
 }
 
 // AdditionalOverlayGenerator allows you to append OverlayGenerator objects
 // to the generation pipeline.
-func AdditionalOverlayGenerator(op ...OverlayGenerator) KustomizeOption {
-	return func(ko *KustomizeEngine) {
+func AdditionalOverlayGenerator(op ...OverlayGenerator) Option {
+	return func(ko *Engine) {
 		ko.OverlayGenerators = append(ko.OverlayGenerators, op...)
 	}
 }
 
-// NewKustomizeEngine returns a KustomizeEngine object. rootPath should
+// NewKustomizeEngine returns a Engine object. rootPath should
 // point to the folder where your base kustomization.yaml resides and patcher
-// is the chain of KustomizationPatcher that makes modifications of Kustomization
+// is the chain of Patcher that makes modifications of Kustomization
 // object.
-func NewKustomizeEngine(k *kustomizeapi.Kustomization, opt ...KustomizeOption) *KustomizeEngine {
-	ko := &KustomizeEngine{
+func NewKustomizeEngine(k *kustomizeapi.Kustomization, opt ...Option) *Engine {
+	ko := &Engine{
 		ResourcePath:  defaultRootPath,
 		Kustomization: k,
 		Patchers: KustomizationPatcherChain{
@@ -90,7 +87,7 @@ func NewKustomizeEngine(k *kustomizeapi.Kustomization, opt ...KustomizeOption) *
 	return ko
 }
 
-type KustomizeEngine struct {
+type Engine struct {
 	// ResourcePath is the folder that the base resources reside in the
 	// filesystem. It should be given as absolute path.
 	ResourcePath string
@@ -108,7 +105,7 @@ type KustomizeEngine struct {
 	OverlayGenerators OverlayGeneratorChain
 }
 
-func (o *KustomizeEngine) Run(cr resource.ParentResource) ([]resource.ChildResource, error) {
+func (o *Engine) Run(cr resource.ParentResource) ([]resource.ChildResource, error) {
 	if err := o.Patchers.Patch(cr, o.Kustomization); err != nil {
 		return nil, errors.Wrap(err, errPatch)
 	}
@@ -136,7 +133,7 @@ func (o *KustomizeEngine) Run(cr resource.ParentResource) ([]resource.ChildResou
 	return objects, nil
 }
 
-func (o *KustomizeEngine) prepareOverlay(k *kustomizeapi.Kustomization, extraFiles []OverlayFile) (string, error) {
+func (o *Engine) prepareOverlay(k *kustomizeapi.Kustomization, extraFiles []OverlayFile) (string, error) {
 	// NOTE(muvaf): Kustomize does not work with symlinked paths, so, we're
 	// using their temp directory generation function that handles this instead
 	// of Golang's.

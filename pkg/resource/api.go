@@ -32,6 +32,12 @@ const (
 	RemoveDefaultAnnotationsTrueValue = "true"
 )
 
+type NopTemplatingEngine struct{}
+
+func (n *NopTemplatingEngine) Run(_ ParentResource) ([]ChildResource, error) {
+	return nil, nil
+}
+
 // NewOwnerReferenceAdder returns a new *OwnerReferenceAdder
 func NewOwnerReferenceAdder() OwnerReferenceAdder {
 	return OwnerReferenceAdder{}

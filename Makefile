@@ -1,7 +1,7 @@
 
 # Image URL to use all building/pushing image targets
 IMG ?= crossplane/templating-controller
-VERSION ?= "0.1.0"
+VERSION ?= "0.2.0"
 
 all: test docker-build
 

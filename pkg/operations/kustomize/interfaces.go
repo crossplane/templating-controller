@@ -20,23 +20,26 @@ import (
 	"sigs.k8s.io/kustomize/api/types"
 )
 
-// A KustomizationPatcher is used to make modifications on Kustomization overlay
+// Option is used to manipulate default Engine parameters.
+type Option func(*Engine)
+
+// A Patcher is used to make modifications on Kustomization overlay
 // object before the render.
-type KustomizationPatcher interface {
+type Patcher interface {
 	Patch(resource.ParentResource, *types.Kustomization) error
 }
 
-// KustomizationPatcherFunc makes it easier to provide only a function as
-// KustomizationPatcher
-type KustomizationPatcherFunc func(resource.ParentResource, *types.Kustomization) error
+// PatcherFunc makes it easier to provide only a function as
+// Patcher
+type PatcherFunc func(resource.ParentResource, *types.Kustomization) error
 
-func (kof KustomizationPatcherFunc) Patch(cr resource.ParentResource, k *types.Kustomization) error {
+func (kof PatcherFunc) Patch(cr resource.ParentResource, k *types.Kustomization) error {
 	return kof(cr, k)
 }
 
-// KustomizationPatcherChain makes it easier to provide a list of KustomizationPatcher
+// KustomizationPatcherChain makes it easier to provide a list of Patcher
 // to be called in order.
-type KustomizationPatcherChain []KustomizationPatcher
+type KustomizationPatcherChain []Patcher
 
 func (koc KustomizationPatcherChain) Patch(cr resource.ParentResource, k *types.Kustomization) error {
 	for _, f := range koc {
