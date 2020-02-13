@@ -120,6 +120,8 @@ func main() {
 				helm3.WithResourcePath(*resourceDirInput)),
 			),
 		)
+	default:
+		kingpin.FatalUsage("the engine type %s is not supported", sd.Spec.Behavior.Engine.Type)
 	}
 	controller := controllers.NewTemplatingReconciler(mgr, gvk, options...)
 	u := &unstructured.Unstructured{}

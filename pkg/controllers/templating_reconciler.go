@@ -19,6 +19,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/crossplaneio/crossplane-runtime/apis/core/v1alpha1"
+	"github.com/crossplaneio/crossplane-runtime/pkg/logging"
+	"github.com/crossplaneio/crossplane-runtime/pkg/meta"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -30,13 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	kustomizeapi "sigs.k8s.io/kustomize/api/types"
 
-	"github.com/crossplaneio/crossplane-runtime/apis/core/v1alpha1"
-	"github.com/crossplaneio/crossplane-runtime/pkg/logging"
-	"github.com/crossplaneio/crossplane-runtime/pkg/meta"
-
-	"github.com/crossplaneio/templating-controller/pkg/operations/kustomize"
 	"github.com/crossplaneio/templating-controller/pkg/resource"
 )
 
@@ -98,7 +95,7 @@ func NewTemplatingReconciler(m manager.Manager, of schema.GroupVersionKind, opti
 		shortWait:         defaultShortWait,
 		longWait:          defaultLongWait,
 		log:               logging.NewNopLogger(),
-		templatingEngine:  kustomize.NewKustomizeEngine(&kustomizeapi.Kustomization{}),
+		templatingEngine:  &resource.NopTemplatingEngine{},
 		childResourcePatcher: resource.ChildResourcePatcherChain{
 			resource.NewOwnerReferenceAdder(),
 			resource.NewDefaultingAnnotationRemover(),
