@@ -1,3 +1,4 @@
+---
 apiVersion: stacks.crossplane.io/v1alpha1
 kind: StackDefinition
 metadata:
@@ -5,26 +6,10 @@ metadata:
 spec:
   behavior:
     source:
-      image: crossplane/stack-minimal-gcp:0.0.2
-      path: "kustomize"
+      image: crossplane/sample-stack-wordpress:0.0.2
+      path: "helm-chart"
     crd:
-      kind: MinimalGCP
-      apiVersion: gcp.resourcepacks.crossplane.io/v1alpha1
+      kind: WordpressInstance
+      apiVersion: wordpress.samples.stacks.crossplane.io/v1alpha1
     engine:
-      type: kustomize
-      kustomize:
-        overlays:
-          - apiVersion: gcp.crossplane.io/v1alpha3
-            kind: Provider
-            name: gcp-provider
-            bindings:
-              - from: "spec.credentialsSecretRef"
-                to: "spec.credentialsSecretRef"
-              - from: "spec.projectID"
-                to: "spec.projectID"
-          - apiVersion: cache.gcp.crossplane.io/v1beta1
-            kind: CloudMemorystoreInstanceClass
-            name: cloudmemorystore
-            bindings:
-              - from: "spec.region"
-                to: "specTemplate.forProvider.region"
+      type: helm3
