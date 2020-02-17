@@ -17,12 +17,8 @@ limitations under the License.
 package fake
 
 import (
-	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/templating-controller/pkg/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 var (
@@ -31,46 +27,9 @@ var (
 )
 
 type MockParentResource struct {
-	metav1.ObjectMeta
-	v1alpha1.ConditionedStatus
-}
-
-func (m *MockParentResource) GetObjectKind() schema.ObjectKind {
-	return schema.EmptyObjectKind
-}
-
-func (m *MockParentResource) DeepCopyObject() runtime.Object {
-	out := &MockParentResource{}
-	j, err := json.Marshal(m)
-	if err != nil {
-		panic(err)
-	}
-	_ = json.Unmarshal(j, out)
-	return out
-}
-
-func (m *MockParentResource) UnstructuredContent() map[string]interface{} {
-	return nil
-}
-
-func (m *MockParentResource) GroupVersionKind() schema.GroupVersionKind {
-	return m.GetObjectKind().GroupVersionKind()
+	unstructured.Unstructured
 }
 
 type MockChildResource struct {
-	metav1.ObjectMeta
-}
-
-func (m *MockChildResource) GetObjectKind() schema.ObjectKind {
-	return schema.EmptyObjectKind
-}
-
-func (m *MockChildResource) DeepCopyObject() runtime.Object {
-	out := &MockChildResource{}
-	j, err := json.Marshal(m)
-	if err != nil {
-		panic(err)
-	}
-	_ = json.Unmarshal(j, out)
-	return out
+	unstructured.Unstructured
 }
