@@ -90,7 +90,9 @@ func NewNamespacePatcher() NamespacePatcher {
 }
 
 // NamespacePatcher patches the child resources whose metadata.namespace is empty
-// with namespace of the parent resource.
+// with namespace of the parent resource. Note that we don't need to know whether
+// child resource is cluster-scoped or not because even though it is, the creation
+// goes through with no error, namespace being skipped.
 type NamespacePatcher struct{}
 
 func (lo NamespacePatcher) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {

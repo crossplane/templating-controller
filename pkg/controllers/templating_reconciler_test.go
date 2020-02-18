@@ -54,16 +54,16 @@ func withNewParentResourceFunc(f func() resource.ParentResource) TemplatingRecon
 	}
 }
 
-type MockParentResourceOption func(*fake.MockParentResource)
+type MockParentResourceOption func(*fake.MockResource)
 
 func withDeletionTimestamp(c *metav1.Time) MockParentResourceOption {
-	return func(cr *fake.MockParentResource) {
+	return func(cr *fake.MockResource) {
 		cr.SetDeletionTimestamp(c)
 	}
 }
 
-func mockParentResource(opts ...MockParentResourceOption) *fake.MockParentResource {
-	cr := &fake.MockParentResource{}
+func mockParentResource(opts ...MockParentResourceOption) *fake.MockResource {
+	cr := &fake.MockResource{}
 	for _, f := range opts {
 		f(cr)
 	}
@@ -98,7 +98,7 @@ func TestReconcile(t *testing.T) {
 			args: args{
 				kube: &test.MockClient{
 					MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
-						cr := obj.(*fake.MockParentResource)
+						cr := obj.(*fake.MockResource)
 						cr.SetDeletionTimestamp(&timeNow)
 						return nil
 					}),
@@ -111,7 +111,7 @@ func TestReconcile(t *testing.T) {
 				kube: &test.MockClient{
 					MockGet: test.NewMockGetFn(nil),
 					MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(obj runtime.Object) error {
-						got := obj.(*fake.MockParentResource)
+						got := obj.(*fake.MockResource)
 						gotCond, err := resource.GetCondition(got, v1alpha1.TypeSynced)
 						if err != nil {
 							t.Errorf("Reconcile(...): error getting condition\n%s", err.Error())
@@ -138,7 +138,7 @@ func TestReconcile(t *testing.T) {
 				kube: &test.MockClient{
 					MockGet: test.NewMockGetFn(nil),
 					MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(obj runtime.Object) error {
-						got := obj.(*fake.MockParentResource)
+						got := obj.(*fake.MockResource)
 						gotCond, err := resource.GetCondition(got, v1alpha1.TypeSynced)
 						if err != nil {
 							t.Errorf("Reconcile(...): error getting condition\n%s", err.Error())
@@ -169,7 +169,7 @@ func TestReconcile(t *testing.T) {
 						return errBoom
 					}),
 					MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(obj runtime.Object) error {
-						got := obj.(*fake.MockParentResource)
+						got := obj.(*fake.MockResource)
 						gotCond, err := resource.GetCondition(got, v1alpha1.TypeSynced)
 						if err != nil {
 							t.Errorf("Reconcile(...): error getting condition\n%s", err.Error())
@@ -184,7 +184,7 @@ func TestReconcile(t *testing.T) {
 				opts: []TemplatingReconcilerOption{
 					WithTemplatingEngine(&resource.NopTemplatingEngine{}),
 					WithChildResourcePatcher(resource.ChildResourcePatcherFunc(func(_ resource.ParentResource, _ []resource.ChildResource) ([]resource.ChildResource, error) {
-						res := &fake.MockChildResource{}
+						res := fake.NewMockResource()
 						res.SetName(fakeName)
 						res.SetNamespace(fakeNamespace)
 						res.SetGroupVersionKind(schema.EmptyObjectKind.GroupVersionKind())
@@ -204,7 +204,7 @@ func TestReconcile(t *testing.T) {
 						return errBoom
 					}),
 					MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(obj runtime.Object) error {
-						got := obj.(*fake.MockParentResource)
+						got := obj.(*fake.MockResource)
 						gotCond, err := resource.GetCondition(got, v1alpha1.TypeSynced)
 						if err != nil {
 							t.Errorf("Reconcile(...): error getting condition\n%s", err.Error())
@@ -232,14 +232,14 @@ func TestReconcile(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			mgr := &runtimefake.Manager{
 				Client: tc.kube,
-				Scheme: runtimefake.SchemeWith(&fake.MockParentResource{}),
+				Scheme: runtimefake.SchemeWith(&fake.MockResource{}),
 			}
 			tc.args.opts = append(tc.args.opts, withNewParentResourceFunc(func() resource.ParentResource {
-				cr := &fake.MockParentResource{}
+				cr := &fake.MockResource{}
 				cr.SetGroupVersionKind(schema.EmptyObjectKind.GroupVersionKind())
 				return cr
 			}))
-			r := NewTemplatingReconciler(mgr, (&fake.MockParentResource{}).GroupVersionKind(), tc.args.opts...)
+			r := NewTemplatingReconciler(mgr, (&fake.MockResource{}).GroupVersionKind(), tc.args.opts...)
 			result, err := r.Reconcile(reconcile.Request{})
 
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
@@ -272,7 +272,7 @@ func TestApply(t *testing.T) {
 					MockGet:    test.NewMockGetFn(kerrors.NewNotFound(schema.GroupResource{}, fakeName)),
 					MockCreate: test.NewMockCreateFn(errBoom),
 				},
-				o: &fake.MockChildResource{},
+				o: fake.NewMockResource(),
 			},
 			want: want{
 				err: errors.Wrap(errBoom, errCreateChildResource),
@@ -283,7 +283,7 @@ func TestApply(t *testing.T) {
 				kube: &test.MockClient{
 					MockGet: test.NewMockGetFn(errBoom),
 				},
-				o: &fake.MockChildResource{},
+				o: fake.NewMockResource(),
 			},
 			want: want{
 				err: errors.Wrap(errBoom, errGetChildResource),
@@ -295,7 +295,7 @@ func TestApply(t *testing.T) {
 					MockGet:   test.NewMockGetFn(nil),
 					MockPatch: test.NewMockPatchFn(nil),
 				},
-				o: &fake.MockChildResource{},
+				o: fake.NewMockResource(),
 			},
 		},
 	}

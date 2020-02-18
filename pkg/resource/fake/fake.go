@@ -17,19 +17,71 @@ limitations under the License.
 package fake
 
 import (
-	"github.com/crossplane/templating-controller/pkg/resource"
+	"github.com/crossplane/crossplane-runtime/pkg/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 var (
-	_ resource.ParentResource = &MockParentResource{}
-	_ resource.ChildResource  = &MockChildResource{}
+	MockParentGVK = schema.GroupVersionKind{
+		Group:   "mock.parent.crossplane.io",
+		Version: "v1alpha1",
+		Kind:    "MockResource",
+	}
+	MockChildGVK = schema.GroupVersionKind{
+		Group:   "mock.child.crossplane.io",
+		Version: "v1alpha1",
+		Kind:    "MockChildResource",
+	}
 )
 
-type MockParentResource struct {
-	unstructured.Unstructured
+type MockResourceOption func(*MockResource)
+
+func WithGVK(gvk schema.GroupVersionKind) MockResourceOption {
+	return func(r *MockResource) {
+		r.SetGroupVersionKind(gvk)
+	}
 }
 
-type MockChildResource struct {
+func WithAnnotations(a map[string]string) MockResourceOption {
+	return func(r *MockResource) {
+		meta.AddAnnotations(r, a)
+	}
+}
+
+func WithLabels(a map[string]string) MockResourceOption {
+	return func(r *MockResource) {
+		meta.AddLabels(r, a)
+	}
+}
+
+func WithOwnerReferenceTo(o metav1.Object, gvk schema.GroupVersionKind) MockResourceOption {
+	return func(r *MockResource) {
+		ref := meta.ReferenceTo(o, gvk)
+		meta.AddOwnerReference(r, meta.AsOwner(ref))
+	}
+}
+
+func WithNamespaceName(name, ns string) MockResourceOption {
+	return func(r *MockResource) {
+		r.SetName(name)
+		r.SetNamespace(ns)
+	}
+}
+
+func NewMockResource(o ...MockResourceOption) *MockResource {
+	p := &MockResource{}
+	p.SetLabels(map[string]string{})
+	p.SetAnnotations(map[string]string{})
+
+	for _, f := range o {
+		f(p)
+	}
+
+	return p
+}
+
+type MockResource struct {
 	unstructured.Unstructured
 }
