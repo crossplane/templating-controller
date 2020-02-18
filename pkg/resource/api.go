@@ -19,7 +19,6 @@ package resource
 import (
 	"strings"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
@@ -49,12 +48,7 @@ func NewOwnerReferenceAdder() OwnerReferenceAdder {
 type OwnerReferenceAdder struct{}
 
 func (lo OwnerReferenceAdder) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
-	ref := metav1.OwnerReference{
-		APIVersion: cr.GetObjectKind().GroupVersionKind().GroupVersion().String(),
-		Kind:       cr.GetObjectKind().GroupVersionKind().Kind,
-		Name:       cr.GetName(),
-		UID:        cr.GetUID(),
-	}
+	ref := meta.ReferenceTo(cr, cr.GroupVersionKind())
 	for _, o := range list {
 		// TODO(muvaf): Provider kind resources are special in the sense that
 		// their deletion should be blocked until all resources provisioned with
@@ -66,7 +60,7 @@ func (lo OwnerReferenceAdder) Patch(cr ParentResource, list []ChildResource) ([]
 		if isProvider(o) {
 			continue
 		}
-		meta.AddOwnerReference(o, ref)
+		meta.AddOwnerReference(o, meta.AsOwner(ref))
 	}
 	return list, nil
 }
