@@ -18,7 +18,6 @@ package resource
 
 import (
 	"encoding/json"
-	"fmt"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -52,7 +51,7 @@ func GetCondition(cr interface{ UnstructuredContent() map[string]interface{} }, 
 			return c, nil
 		}
 	}
-	return v1alpha1.Condition{}, err
+	return v1alpha1.Condition{Type: ct, Status: v1.ConditionUnknown}, err
 }
 
 // SetConditions sets the supplied conditions, replacing any existing conditions
@@ -99,7 +98,6 @@ func SetConditions(cr interface{ UnstructuredContent() map[string]interface{} },
 	}
 	finalForm := []interface{}{}
 	if err := json.Unmarshal(resultJSON, &finalForm); err != nil {
-		fmt.Print(err.Error())
 		return err
 	}
 	return unstructured.SetNestedSlice(cr.UnstructuredContent(), finalForm, "status", "conditions")

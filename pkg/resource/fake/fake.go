@@ -17,10 +17,15 @@ limitations under the License.
 package fake
 
 import (
-	"github.com/crossplane/crossplane-runtime/pkg/meta"
+	"bytes"
+	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/yaml"
+
+	"github.com/crossplane/crossplane-runtime/pkg/meta"
 )
 
 var (
@@ -67,6 +72,16 @@ func WithNamespaceName(name, ns string) MockResourceOption {
 	return func(r *MockResource) {
 		r.SetName(name)
 		r.SetNamespace(ns)
+	}
+}
+
+func FromYAML(y []byte) MockResourceOption {
+	return func(r *MockResource) {
+		dec := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(y), 4096)
+		err := dec.Decode(&r.Unstructured)
+		if err != nil {
+			panic(fmt.Sprintf("test yaml is not correct: %s", err.Error()))
+		}
 	}
 }
 
