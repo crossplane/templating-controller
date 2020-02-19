@@ -18,7 +18,6 @@ package resource
 
 import (
 	"encoding/json"
-	"fmt"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -31,25 +30,28 @@ import (
 
 // GetCondition returns the condition for the given ConditionType if exists,
 // otherwise returns nil
-func GetCondition(cr interface{ UnstructuredContent() map[string]interface{} }, ct v1alpha1.ConditionType) v1alpha1.Condition {
+func GetCondition(cr interface{ UnstructuredContent() map[string]interface{} }, ct v1alpha1.ConditionType) (v1alpha1.Condition, error) {
 	fetchedConditions, exists, err := unstructured.NestedFieldCopy(cr.UnstructuredContent(), "status", "conditions")
-	if err != nil || !exists {
-		return v1alpha1.Condition{Type: ct, Status: v1.ConditionUnknown}
+	if err != nil {
+		return v1alpha1.Condition{}, err
+	}
+	if !exists {
+		return v1alpha1.Condition{Type: ct, Status: v1.ConditionUnknown}, nil
 	}
 	conditionsJSON, err := json.Marshal(fetchedConditions)
 	if err != nil {
-		return v1alpha1.Condition{Type: ct, Status: v1.ConditionUnknown}
+		return v1alpha1.Condition{}, err
 	}
 	conditions := []v1alpha1.Condition{}
 	if err := json.Unmarshal(conditionsJSON, &conditions); err != nil {
-		return v1alpha1.Condition{Type: ct, Status: v1.ConditionUnknown}
+		return v1alpha1.Condition{}, err
 	}
 	for _, c := range conditions {
 		if c.Type == ct {
-			return c
+			return c, nil
 		}
 	}
-	return v1alpha1.Condition{Type: ct, Status: v1.ConditionUnknown}
+	return v1alpha1.Condition{Type: ct, Status: v1.ConditionUnknown}, err
 }
 
 // SetConditions sets the supplied conditions, replacing any existing conditions
@@ -96,7 +98,6 @@ func SetConditions(cr interface{ UnstructuredContent() map[string]interface{} },
 	}
 	finalForm := []interface{}{}
 	if err := json.Unmarshal(resultJSON, &finalForm); err != nil {
-		fmt.Print(err.Error())
 		return err
 	}
 	return unstructured.SetNestedSlice(cr.UnstructuredContent(), finalForm, "status", "conditions")

@@ -43,6 +43,12 @@ type TemplatingEngine interface {
 	Run(ParentResource) ([]ChildResource, error)
 }
 
+type TemplatingEngineFunc func(ParentResource) ([]ChildResource, error)
+
+func (t TemplatingEngineFunc) Run(cr ParentResource) ([]ChildResource, error) {
+	return t(cr)
+}
+
 // ChildResourcePatcher operates on the resources rendered by the templating
 // engine.
 type ChildResourcePatcher interface {

@@ -62,8 +62,10 @@ func (h *Engine) Run(cr resource.ParentResource) ([]resource.ChildResource, erro
 		return nil, err
 	}
 	config := action.Configuration{}
-	// TODO(muvaf): how about cluster-scoped parent resources with no namespace?
-	if err := config.Init(nil, cr.GetNamespace(), "memory", func(format string, v ...interface{}) {
+	// NOTE(muvaf): RESTGetter is skipped because we don't need to talk with cluster.
+	// namespace is skipped because we use "memory" as storage rather than actual
+	// ConfigMap or Secret objects.
+	if err := config.Init(nil, "", "memory", func(format string, v ...interface{}) {
 		// TODO(muvaf): look for better handling of logging.
 		fmt.Printf(format, v)
 	}); err != nil {
@@ -74,7 +76,10 @@ func (h *Engine) Run(cr resource.ParentResource) ([]resource.ChildResource, erro
 	i.ReleaseName = cr.GetName()
 	i.Replace = true // Skip the name check
 	i.ClientOnly = true
-	// i.APIVersions = chartutil.VersionSet{}
+
+	// TODO(muvaf): We will need to implement a transformation mechanism here
+	// to manipulate spec field as user desires instead of copying it directly
+	// like savages.
 	values := map[string]interface{}{}
 	if valuesMap, exists := cr.UnstructuredContent()["spec"]; exists {
 		if valuesCasted, ok := valuesMap.(map[string]interface{}); !ok {

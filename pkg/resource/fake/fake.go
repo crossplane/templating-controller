@@ -17,60 +17,86 @@ limitations under the License.
 package fake
 
 import (
-	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
-	"github.com/crossplane/templating-controller/pkg/resource"
+	"bytes"
+	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/apimachinery/pkg/util/yaml"
+
+	"github.com/crossplane/crossplane-runtime/pkg/meta"
 )
 
 var (
-	_ resource.ParentResource = &MockParentResource{}
-	_ resource.ChildResource  = &MockChildResource{}
+	MockParentGVK = schema.GroupVersionKind{
+		Group:   "mock.parent.crossplane.io",
+		Version: "v1alpha1",
+		Kind:    "MockResource",
+	}
+	MockChildGVK = schema.GroupVersionKind{
+		Group:   "mock.child.crossplane.io",
+		Version: "v1alpha1",
+		Kind:    "MockChildResource",
+	}
 )
 
-type MockParentResource struct {
-	metav1.ObjectMeta
-	v1alpha1.ConditionedStatus
-}
+type MockResourceOption func(*MockResource)
 
-func (m *MockParentResource) GetObjectKind() schema.ObjectKind {
-	return schema.EmptyObjectKind
-}
-
-func (m *MockParentResource) DeepCopyObject() runtime.Object {
-	out := &MockParentResource{}
-	j, err := json.Marshal(m)
-	if err != nil {
-		panic(err)
+func WithGVK(gvk schema.GroupVersionKind) MockResourceOption {
+	return func(r *MockResource) {
+		r.SetGroupVersionKind(gvk)
 	}
-	_ = json.Unmarshal(j, out)
-	return out
 }
 
-func (m *MockParentResource) UnstructuredContent() map[string]interface{} {
-	return nil
-}
-
-func (m *MockParentResource) GroupVersionKind() schema.GroupVersionKind {
-	return m.GetObjectKind().GroupVersionKind()
-}
-
-type MockChildResource struct {
-	metav1.ObjectMeta
-}
-
-func (m *MockChildResource) GetObjectKind() schema.ObjectKind {
-	return schema.EmptyObjectKind
-}
-
-func (m *MockChildResource) DeepCopyObject() runtime.Object {
-	out := &MockChildResource{}
-	j, err := json.Marshal(m)
-	if err != nil {
-		panic(err)
+func WithAnnotations(a map[string]string) MockResourceOption {
+	return func(r *MockResource) {
+		meta.AddAnnotations(r, a)
 	}
-	_ = json.Unmarshal(j, out)
-	return out
+}
+
+func WithLabels(a map[string]string) MockResourceOption {
+	return func(r *MockResource) {
+		meta.AddLabels(r, a)
+	}
+}
+
+func WithOwnerReferenceTo(o metav1.Object, gvk schema.GroupVersionKind) MockResourceOption {
+	return func(r *MockResource) {
+		ref := meta.ReferenceTo(o, gvk)
+		meta.AddOwnerReference(r, meta.AsOwner(ref))
+	}
+}
+
+func WithNamespaceName(name, ns string) MockResourceOption {
+	return func(r *MockResource) {
+		r.SetName(name)
+		r.SetNamespace(ns)
+	}
+}
+
+func FromYAML(y []byte) MockResourceOption {
+	return func(r *MockResource) {
+		dec := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(y), 4096)
+		err := dec.Decode(&r.Unstructured)
+		if err != nil {
+			panic(fmt.Sprintf("test yaml is not correct: %s", err.Error()))
+		}
+	}
+}
+
+func NewMockResource(o ...MockResourceOption) *MockResource {
+	p := &MockResource{}
+	p.SetLabels(map[string]string{})
+	p.SetAnnotations(map[string]string{})
+
+	for _, f := range o {
+		f(p)
+	}
+
+	return p
+}
+
+type MockResource struct {
+	unstructured.Unstructured
 }

@@ -43,18 +43,20 @@ const (
 	defaultShortWait = 30 * time.Second
 	defaultLongWait  = 1 * time.Minute
 
-	errUpdateResourceStatus  = "could not update status of the custom resource"
-	errGetResource           = "could not get the custom resource"
+	errUpdateResourceStatus  = "could not update status of the parent resource"
+	errGetResource           = "could not get the parent resource"
 	errTemplatingOperation   = "templating operation failed"
 	errChildResourcePatchers = "child resource patchers failed"
 	errApply                 = "apply failed"
+	errCreateChildResource   = "could not create child resource"
+	errGetChildResource      = "could not get child resource"
 )
 
 type TemplatingReconcilerOption func(*TemplatingReconciler)
 
-func AdditionalChildResourcePatcher(op ...resource.ChildResourcePatcher) TemplatingReconcilerOption {
+func WithChildResourcePatcher(op ...resource.ChildResourcePatcher) TemplatingReconcilerOption {
 	return func(reconciler *TemplatingReconciler) {
-		reconciler.childResourcePatcher = append(reconciler.childResourcePatcher, op...)
+		reconciler.childResourcePatcher = op
 	}
 }
 
@@ -142,24 +144,24 @@ func (r *TemplatingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 
 	childResources, err := r.templatingEngine.Run(cr)
 	if err != nil {
-		r.nonFatalError(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errTemplatingOperation))))
+		r.onlyLog(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errTemplatingOperation))))
 		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 
 	childResources, err = r.childResourcePatcher.Patch(cr, childResources)
 	if err != nil {
-		r.nonFatalError(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errChildResourcePatchers))))
+		r.onlyLog(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errChildResourcePatchers))))
 		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 
 	for _, o := range childResources {
 		if err := Apply(ctx, r.kube, o); err != nil {
-			r.nonFatalError(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, fmt.Sprintf("%s: %s/%s of type %s", errApply, o.GetName(), o.GetNamespace(), o.GetObjectKind().GroupVersionKind().String())))))
+			r.onlyLog(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, fmt.Sprintf("%s: %s/%s of type %s", errApply, o.GetName(), o.GetNamespace(), o.GetObjectKind().GroupVersionKind().String())))))
 			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 		}
 	}
 
-	r.nonFatalError(resource.SetConditions(cr, v1alpha1.ReconcileSuccess()))
+	r.onlyLog(resource.SetConditions(cr, v1alpha1.ReconcileSuccess()))
 	return ctrl.Result{RequeueAfter: r.longWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 }
 
@@ -168,10 +170,10 @@ func Apply(ctx context.Context, kube client.Client, o resource.ChildResource) er
 	existing := o.DeepCopyObject().(resource.ChildResource)
 	err := kube.Get(ctx, types.NamespacedName{Name: o.GetName(), Namespace: o.GetNamespace()}, existing)
 	if kerrors.IsNotFound(err) {
-		return kube.Create(ctx, o)
+		return errors.Wrap(kube.Create(ctx, o), errCreateChildResource)
 	}
 	if err != nil {
-		return err
+		return errors.Wrap(err, errGetChildResource)
 	}
 	patchJSON, err := json.Marshal(o)
 	if err != nil {
@@ -180,8 +182,8 @@ func Apply(ctx context.Context, kube client.Client, o resource.ChildResource) er
 	return kube.Patch(ctx, existing, client.ConstantPatch(types.MergePatchType, patchJSON))
 }
 
-func (t *TemplatingReconciler) nonFatalError(err error) {
+func (r *TemplatingReconciler) onlyLog(err error) {
 	if err != nil {
-		t.log.Info(err.Error())
+		r.log.Info(err.Error())
 	}
 }
