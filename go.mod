@@ -1,10 +1,10 @@
-module github.com/crossplaneio/templating-controller
+module github.com/crossplane/templating-controller
 
 go 1.13
 
 require (
-	github.com/crossplaneio/crossplane v0.7.0-rc.0.20200206230838-4534223ff95e
-	github.com/crossplaneio/crossplane-runtime v0.4.1-0.20200201005410-a6bb086be888
+	github.com/crossplane/crossplane v0.8.0-rc.0.20200219030944-557074689d71
+	github.com/crossplane/crossplane-runtime v0.5.1-0.20200219022054-8948e50564b1
 	github.com/google/go-cmp v0.4.0
 	github.com/pkg/errors v0.9.1
 	golang.org/x/net v0.0.0-20191028085509-fe3aa8a45271

@@ -25,12 +25,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/crossplaneio/crossplane-runtime/apis/core/v1alpha1"
-	runtimefake "github.com/crossplaneio/crossplane-runtime/pkg/resource/fake"
-	"github.com/crossplaneio/crossplane-runtime/pkg/test"
+	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	runtimefake "github.com/crossplane/crossplane-runtime/pkg/resource/fake"
+	"github.com/crossplane/crossplane-runtime/pkg/test"
 
-	"github.com/crossplaneio/templating-controller/pkg/resource"
-	"github.com/crossplaneio/templating-controller/pkg/resource/fake"
+	"github.com/crossplane/templating-controller/pkg/resource"
+	"github.com/crossplane/templating-controller/pkg/resource/fake"
 )
 
 type MockParentResourceOption func(*fake.MockParentResource)

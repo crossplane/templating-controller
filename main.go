@@ -35,13 +35,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	kustomizeapi "sigs.k8s.io/kustomize/api/types"
 
-	"github.com/crossplaneio/crossplane-runtime/pkg/logging"
-	"github.com/crossplaneio/crossplane/apis/stacks"
-	"github.com/crossplaneio/crossplane/apis/stacks/v1alpha1"
+	"github.com/crossplane/crossplane-runtime/pkg/logging"
+	"github.com/crossplane/crossplane/apis/stacks"
+	"github.com/crossplane/crossplane/apis/stacks/v1alpha1"
 
-	"github.com/crossplaneio/templating-controller/pkg/controllers"
-	"github.com/crossplaneio/templating-controller/pkg/operations/helm3"
-	"github.com/crossplaneio/templating-controller/pkg/operations/kustomize"
+	"github.com/crossplane/templating-controller/pkg/controllers"
+	"github.com/crossplane/templating-controller/pkg/operations/helm3"
+	"github.com/crossplane/templating-controller/pkg/operations/kustomize"
 )
 
 const (

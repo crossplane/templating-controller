@@ -16,7 +16,7 @@ limitations under the License.
 package kustomize
 
 import (
-	"github.com/crossplaneio/templating-controller/pkg/resource"
+	"github.com/crossplane/templating-controller/pkg/resource"
 	"sigs.k8s.io/kustomize/api/types"
 )
 
