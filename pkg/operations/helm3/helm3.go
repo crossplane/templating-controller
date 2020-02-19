@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/yaml"
 
-	"github.com/crossplaneio/templating-controller/pkg/resource"
+	"github.com/crossplane/templating-controller/pkg/resource"
 )
 
 const (

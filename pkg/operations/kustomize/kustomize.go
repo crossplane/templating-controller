@@ -28,7 +28,7 @@ import (
 	kustomizeapi "sigs.k8s.io/kustomize/api/types"
 	"sigs.k8s.io/yaml"
 
-	"github.com/crossplaneio/templating-controller/pkg/resource"
+	"github.com/crossplane/templating-controller/pkg/resource"
 )
 
 const (

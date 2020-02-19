@@ -22,9 +22,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/crossplaneio/crossplane-runtime/apis/core/v1alpha1"
-	"github.com/crossplaneio/crossplane-runtime/pkg/meta"
-	"github.com/crossplaneio/crossplane/pkg/stacks"
+	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	"github.com/crossplane/crossplane-runtime/pkg/meta"
+	"github.com/crossplane/crossplane/pkg/stacks"
 )
 
 const (
@@ -133,7 +133,7 @@ func NewParentLabelSetAdder() ParentLabelSetAdder {
 }
 
 // ParentLabelSetAdder adds parent labels to the child resources.
-// See https://github.com/crossplaneio/crossplane/blob/master/design/one-pager-stack-relationship-labels.md
+// See https://github.com/crossplane/crossplane/blob/master/design/one-pager-stack-relationship-labels.md
 type ParentLabelSetAdder struct{}
 
 func (lo ParentLabelSetAdder) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {

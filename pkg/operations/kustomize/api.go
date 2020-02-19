@@ -26,9 +26,9 @@ import (
 	"sigs.k8s.io/kustomize/api/types"
 	"sigs.k8s.io/yaml"
 
-	"github.com/crossplaneio/crossplane/apis/stacks/v1alpha1"
+	"github.com/crossplane/crossplane/apis/stacks/v1alpha1"
 
-	"github.com/crossplaneio/templating-controller/pkg/resource"
+	"github.com/crossplane/templating-controller/pkg/resource"
 )
 
 // NewNamePrefixer returns a new *NamePrefixer.
