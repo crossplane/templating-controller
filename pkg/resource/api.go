@@ -48,7 +48,9 @@ func NewOwnerReferenceAdder() OwnerReferenceAdder {
 type OwnerReferenceAdder struct{}
 
 func (lo OwnerReferenceAdder) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
-	ref := meta.ReferenceTo(cr, cr.GroupVersionKind())
+	ref := meta.AsOwner(meta.ReferenceTo(cr, cr.GroupVersionKind()))
+	trueVal := true
+	ref.BlockOwnerDeletion = &trueVal
 	for _, o := range list {
 		// TODO(muvaf): Provider kind resources are special in the sense that
 		// their deletion should be blocked until all resources provisioned with
@@ -60,7 +62,7 @@ func (lo OwnerReferenceAdder) Patch(cr ParentResource, list []ChildResource) ([]
 		if isProvider(o) {
 			continue
 		}
-		meta.AddOwnerReference(o, meta.AsOwner(ref))
+		meta.AddOwnerReference(o, ref)
 	}
 	return list, nil
 }

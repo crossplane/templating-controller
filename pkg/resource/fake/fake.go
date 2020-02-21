@@ -63,8 +63,10 @@ func WithLabels(a map[string]string) MockResourceOption {
 
 func WithOwnerReferenceTo(o metav1.Object, gvk schema.GroupVersionKind) MockResourceOption {
 	return func(r *MockResource) {
-		ref := meta.ReferenceTo(o, gvk)
-		meta.AddOwnerReference(r, meta.AsOwner(ref))
+		ref := meta.AsOwner(meta.ReferenceTo(o, gvk))
+		trueVal := true
+		ref.BlockOwnerDeletion = &trueVal
+		meta.AddOwnerReference(r, ref)
 	}
 }
 
