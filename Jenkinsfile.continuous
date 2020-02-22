@@ -1,0 +1,43 @@
+// The continuous pipeline is used to build and publish new versions of the stack when changes are merged into
+// the master branch.
+pipeline {
+    agent { label 'upbound-gce' }
+
+    options {
+        disableConcurrentBuilds()
+        timestamps()
+    }
+
+    // Checks for unprocessed changes in the repo once per day
+    // 'H' allows Jenkins to choose the time to balance the load
+    triggers {
+        pollSCM('H H * * *')
+    }
+
+    environment {
+        DOCKER = credentials('dockerhub-upboundci')
+    }
+
+    stages {
+        stage('Publish Release') {
+
+            steps {
+                // The build step turns this into a "dirty" environment from the perspective of `git describe`,
+                // so we set the version once at the beginning and use it for both the build and publish steps.
+
+                sh """VERSION=\$( git describe --tags --dirty --always )
+                      VERSION=\${VERSION} make docker-build
+                      VERSION=\${VERSION} make docker-push
+                """
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                deleteDir()
+            }
+        }
+    }
+}

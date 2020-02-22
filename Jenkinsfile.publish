@@ -1,0 +1,41 @@
+// The publish pipeline is used to publish a single tagged image version of the stack.
+pipeline {
+    agent { label 'upbound-gce' }
+
+    parameters {
+        string(name: 'version', defaultValue: '', description: 'The version you are publishing. For example: v0.4.0. If left unspecified, the build will generate one for you.')
+    }
+
+    options {
+        disableConcurrentBuilds()
+        timestamps()
+    }
+
+    environment {
+        DOCKER = credentials('dockerhub-upboundci')
+    }
+
+    stages {
+        stage('Promote Release') {
+
+            steps {
+                // The build step turns this into a "dirty" environment from the perspective of `git describe`,
+                // so we set the version once at the beginning and use it for both the build and publish steps.
+
+                sh """VERSION=${params.version}
+                      VERSION=\${VERSION:-\$( git describe --tags --dirty --always )}
+                      VERSION=\${VERSION} make docker-build
+                      VERSION=\${VERSION} make docker-push
+                """
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                deleteDir()
+            }
+        }
+    }
+}
