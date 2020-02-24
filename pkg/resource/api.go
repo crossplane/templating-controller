@@ -26,13 +26,17 @@ import (
 	"github.com/crossplane/crossplane/pkg/stacks"
 )
 
+// Constants used for determining whether the defaulting annotations should be
+// removed or not.
 const (
 	RemoveDefaultAnnotationsKey       = "templatestacks.crossplane.io/remove-defaulting-annotations"
 	RemoveDefaultAnnotationsTrueValue = "true"
 )
 
+// NopTemplatingEngine is a no-op templating engine.
 type NopTemplatingEngine struct{}
 
+// Run does nothing.
 func (n *NopTemplatingEngine) Run(_ ParentResource) ([]ChildResource, error) {
 	return nil, nil
 }
@@ -47,6 +51,7 @@ func NewOwnerReferenceAdder() OwnerReferenceAdder {
 // refer to them are deleted.
 type OwnerReferenceAdder struct{}
 
+// Patch patches the child resources with information in ParentResource.
 func (lo OwnerReferenceAdder) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
 	ref := meta.AsOwner(meta.ReferenceTo(cr, cr.GroupVersionKind()))
 	trueVal := true
@@ -76,6 +81,7 @@ func NewDefaultingAnnotationRemover() DefaultingAnnotationRemover {
 // if it is requested through the special annotation.
 type DefaultingAnnotationRemover struct{}
 
+// Patch patches the child resources with information in ParentResource.
 func (lo DefaultingAnnotationRemover) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
 	if cr.GetAnnotations()[RemoveDefaultAnnotationsKey] != RemoveDefaultAnnotationsTrueValue {
 		return list, nil
@@ -97,6 +103,7 @@ func NewNamespacePatcher() NamespacePatcher {
 // goes through with no error, namespace being skipped.
 type NamespacePatcher struct{}
 
+// Patch patches the child resources with information in ParentResource.
 func (lo NamespacePatcher) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
 	if cr.GetNamespace() == "" {
 		return list, nil
@@ -118,6 +125,7 @@ func NewLabelPropagator() LabelPropagator {
 // to all child resources.
 type LabelPropagator struct{}
 
+// Patch patches the child resources with information in ParentResource.
 func (lo LabelPropagator) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
 	for _, o := range list {
 		meta.AddLabels(o, cr.GetLabels())
@@ -134,6 +142,7 @@ func NewParentLabelSetAdder() ParentLabelSetAdder {
 // See https://github.com/crossplane/crossplane/blob/master/design/one-pager-stack-relationship-labels.md
 type ParentLabelSetAdder struct{}
 
+// Patch patches the child resources with information in ParentResource.
 func (lo ParentLabelSetAdder) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
 	for _, o := range list {
 		meta.AddLabels(o, stacks.ParentLabels(cr))
@@ -144,5 +153,5 @@ func (lo ParentLabelSetAdder) Patch(cr ParentResource, list []ChildResource) ([]
 // todo: temp solution to detect provider kind.
 func isProvider(o runtime.Object) bool {
 	gvk := o.GetObjectKind().GroupVersionKind()
-	return strings.HasSuffix(gvk.Group, "crossplane.io") && strings.ToLower(gvk.Kind) == "provider"
+	return strings.HasSuffix(gvk.Group, "crossplane.io") && strings.EqualFold(gvk.Kind, "provider")
 }

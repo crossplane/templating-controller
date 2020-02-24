@@ -41,12 +41,14 @@ const (
 	errParse               = "could not parse the generated YAMLs"
 )
 
+// WithResourcePath returns an Option that changes the resource path of the Engine.
 func WithResourcePath(path string) Option {
 	return func(h *Engine) {
 		h.ResourcePath = path
 	}
 }
 
+// WithLogger returns an Option that changes the logger of the Engine.
 func WithLogger(l logging.Logger) Option {
 	return func(h *Engine) {
 		// NOTE(muvaf): Even though l.Debug seems to satisfy action.DebugLog interface,
@@ -58,6 +60,7 @@ func WithLogger(l logging.Logger) Option {
 	}
 }
 
+// NewHelm3Engine returns a new Helm3 Engine to be used as resource.TemplatingEngine.
 func NewHelm3Engine(o ...Option) resource.TemplatingEngine {
 	h := &Engine{
 		ResourcePath: defaultRootPath,
@@ -68,6 +71,7 @@ func NewHelm3Engine(o ...Option) resource.TemplatingEngine {
 	return h
 }
 
+// Engine is used to do the templating operation via Helm3.
 type Engine struct {
 	// ResourcePath is the folder that the base resources reside in the
 	// filesystem. It should be given as absolute path.
@@ -77,6 +81,7 @@ type Engine struct {
 	log action.DebugLog
 }
 
+// Run returns the result of the templating operation.
 func (h *Engine) Run(cr resource.ParentResource) ([]resource.ChildResource, error) {
 	chart, err := loader.Load(h.ResourcePath)
 	if err != nil {

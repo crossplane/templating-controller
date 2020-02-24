@@ -44,6 +44,7 @@ import (
 	"github.com/crossplane/templating-controller/pkg/operations/kustomize"
 )
 
+// Engine name constants.
 const (
 	KustomizeEngine = "kustomize"
 	Helm3Engine     = "helm3"

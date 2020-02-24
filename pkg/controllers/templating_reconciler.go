@@ -13,15 +13,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package controllers
 
 import (
 	"fmt"
 	"time"
 
-	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
-	"github.com/crossplane/crossplane-runtime/pkg/logging"
-	"github.com/crossplane/crossplane-runtime/pkg/meta"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -33,6 +31,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	"github.com/crossplane/crossplane-runtime/pkg/logging"
+	"github.com/crossplane/crossplane-runtime/pkg/meta"
 
 	"github.com/crossplane/templating-controller/pkg/resource"
 )
@@ -52,38 +54,53 @@ const (
 	errGetChildResource      = "could not get child resource"
 )
 
+// TemplatingReconcilerOption is used to provide necessary changes to templating
+// reconciler configuration.
 type TemplatingReconcilerOption func(*TemplatingReconciler)
 
+// WithChildResourcePatcher returns a TemplatingReconcilerOption that changes the
+// ChildResourcePatchers.
 func WithChildResourcePatcher(op ...resource.ChildResourcePatcher) TemplatingReconcilerOption {
 	return func(reconciler *TemplatingReconciler) {
 		reconciler.childResourcePatcher = op
 	}
 }
 
+// WithTemplatingEngine returns a TemplatingReconcilerOption that changes the
+// templating engine.
 func WithTemplatingEngine(eng resource.TemplatingEngine) TemplatingReconcilerOption {
 	return func(reconciler *TemplatingReconciler) {
 		reconciler.templatingEngine = eng
 	}
 }
 
+// WithShortWait returns a TemplatingReconcilerOption that changes the wait
+// duration that determines after how much time another reconcile should be triggered
+// after an error pass.
 func WithShortWait(d time.Duration) TemplatingReconcilerOption {
 	return func(reconciler *TemplatingReconciler) {
 		reconciler.shortWait = d
 	}
 }
 
+// WithLongWait returns a TemplatingReconcilerOption that changes the wait
+// duration that determines after how much time another reconcile should be triggered
+// after a successful pass.
 func WithLongWait(d time.Duration) TemplatingReconcilerOption {
 	return func(reconciler *TemplatingReconciler) {
 		reconciler.longWait = d
 	}
 }
 
+// WithLogger returns a TemplatingReconcilerOption that changes the logger.
 func WithLogger(l logging.Logger) TemplatingReconcilerOption {
 	return func(reconciler *TemplatingReconciler) {
 		reconciler.log = l
 	}
 }
 
+// NewTemplatingReconciler returns a new templating reconciler that will reconcile
+// given GroupVersionKind.
 func NewTemplatingReconciler(m manager.Manager, of schema.GroupVersionKind, options ...TemplatingReconcilerOption) *TemplatingReconciler {
 	nr := func() resource.ParentResource {
 		u := &unstructured.Unstructured{}
@@ -113,6 +130,8 @@ func NewTemplatingReconciler(m manager.Manager, of schema.GroupVersionKind, opti
 	return r
 }
 
+// TemplatingReconciler is used to reconcile an arbitrary CRD whose GroupVersionKind
+// is supplied.
 type TemplatingReconciler struct {
 	kube              client.Client
 	newParentResource func() resource.ParentResource
@@ -124,6 +143,7 @@ type TemplatingReconciler struct {
 	childResourcePatcher resource.ChildResourcePatcherChain
 }
 
+// Reconcile is called by controller-runtime for reconciliation.
 func (r *TemplatingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), reconcileTimeout)
 	defer cancel()
@@ -164,7 +184,7 @@ func (r *TemplatingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 	return ctrl.Result{RequeueAfter: r.longWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 }
 
-// Apply creates if the object doesn't exist and patches if it does exists.
+// Apply creates if the object doesn't exist and patches if it exists.
 func Apply(ctx context.Context, kube client.Client, o resource.ChildResource) error {
 	existing := o.DeepCopyObject().(resource.ChildResource)
 	err := kube.Get(ctx, types.NamespacedName{Name: o.GetName(), Namespace: o.GetNamespace()}, existing)

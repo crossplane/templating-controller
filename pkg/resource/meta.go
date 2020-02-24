@@ -31,7 +31,7 @@ import (
 // GetCondition returns the condition for the given ConditionType if exists,
 // otherwise returns nil
 func GetCondition(cr interface{ UnstructuredContent() map[string]interface{} }, ct v1alpha1.ConditionType) (v1alpha1.Condition, error) {
-	fetchedConditions, exists, err := unstructured.NestedFieldCopy(cr.UnstructuredContent(), "status", "conditions")
+	fetchedConditions, exists, err := unstructured.NestedFieldCopy(cr.UnstructuredContent(), "status")
 	if err != nil {
 		return v1alpha1.Condition{}, err
 	}
@@ -42,24 +42,19 @@ func GetCondition(cr interface{ UnstructuredContent() map[string]interface{} }, 
 	if err != nil {
 		return v1alpha1.Condition{}, err
 	}
-	conditions := []v1alpha1.Condition{}
-	if err := json.Unmarshal(conditionsJSON, &conditions); err != nil {
+	conditioned := v1alpha1.ConditionedStatus{}
+	if err := json.Unmarshal(conditionsJSON, &conditioned); err != nil {
 		return v1alpha1.Condition{}, err
 	}
-	for _, c := range conditions {
-		if c.Type == ct {
-			return c, nil
-		}
-	}
-	return v1alpha1.Condition{Type: ct, Status: v1.ConditionUnknown}, err
+	return conditioned.GetCondition(ct), nil
 }
 
 // SetConditions sets the supplied conditions, replacing any existing conditions
 // of the same type. This is a no-op if all supplied conditions are identical,
 // ignoring the last transition time, to those already set.
 func SetConditions(cr interface{ UnstructuredContent() map[string]interface{} }, c ...v1alpha1.Condition) error {
-	conditions := []v1alpha1.Condition{}
-	fetched, exists, err := unstructured.NestedFieldCopy(cr.UnstructuredContent(), "status", "conditions")
+	conditioned := v1alpha1.ConditionedStatus{}
+	fetched, exists, err := unstructured.NestedFieldCopy(cr.UnstructuredContent(), "status")
 	if err != nil {
 		return err
 	}
@@ -68,31 +63,12 @@ func SetConditions(cr interface{ UnstructuredContent() map[string]interface{} },
 		if err != nil {
 			return err
 		}
-		if err := json.Unmarshal(statusJSON, &conditions); err != nil {
+		if err := json.Unmarshal(statusJSON, &conditioned); err != nil {
 			return err
 		}
 	}
-
-	for _, newC := range c {
-		exists := false
-		for i, existing := range conditions {
-			if existing.Type != newC.Type {
-				continue
-			}
-
-			if existing.Equal(newC) {
-				exists = true
-				continue
-			}
-
-			conditions[i] = newC
-			exists = true
-		}
-		if !exists {
-			conditions = append(conditions, newC)
-		}
-	}
-	resultJSON, err := json.Marshal(conditions)
+	conditioned.SetConditions(c...)
+	resultJSON, err := json.Marshal(conditioned.Conditions)
 	if err != nil {
 		return err
 	}

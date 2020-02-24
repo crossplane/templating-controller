@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package kustomize
 
 import (
@@ -33,6 +34,7 @@ type Patcher interface {
 // Patcher
 type PatcherFunc func(resource.ParentResource, *types.Kustomization) error
 
+// Patch patches the given *types.Kustomization with information in resource.ParentResource.
 func (kof PatcherFunc) Patch(cr resource.ParentResource, k *types.Kustomization) error {
 	return kof(cr, k)
 }
@@ -41,6 +43,7 @@ func (kof PatcherFunc) Patch(cr resource.ParentResource, k *types.Kustomization)
 // to be called in order.
 type KustomizationPatcherChain []Patcher
 
+// Patch patches the given *types.Kustomization with information in resource.ParentResource.
 func (koc KustomizationPatcherChain) Patch(cr resource.ParentResource, k *types.Kustomization) error {
 	for _, f := range koc {
 		if err := f.Patch(cr, k); err != nil {
@@ -50,11 +53,15 @@ func (koc KustomizationPatcherChain) Patch(cr resource.ParentResource, k *types.
 	return nil
 }
 
+// OverlayFile is used to represent the files to be written to the top overlay
+// folder used during kustomization operation.
 type OverlayFile struct {
 	Name string
 	Data []byte
 }
 
+// OverlayGenerator is used for generating files to be written to the top kustomization
+// folder.
 type OverlayGenerator interface {
 	Generate(resource.ParentResource, *types.Kustomization) ([]OverlayFile, error)
 }
@@ -63,8 +70,9 @@ type OverlayGenerator interface {
 // to be called in order.
 type OverlayGeneratorChain []OverlayGenerator
 
+// Generate generates OverlayFiles.
 func (ogc OverlayGeneratorChain) Generate(cr resource.ParentResource, k *types.Kustomization) ([]OverlayFile, error) {
-	var result []OverlayFile
+	result := []OverlayFile{}
 	for _, f := range ogc {
 		file, err := f.Generate(cr, k)
 		if err != nil {

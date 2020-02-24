@@ -29,11 +29,13 @@ import (
 )
 
 var (
+	// MockParentGVK is used as mock GVK of a parent resource.
 	MockParentGVK = schema.GroupVersionKind{
 		Group:   "mock.parent.crossplane.io",
 		Version: "v1alpha1",
 		Kind:    "MockResource",
 	}
+	// MockChildGVK is used as mock GVK of a child resource.
 	MockChildGVK = schema.GroupVersionKind{
 		Group:   "mock.child.crossplane.io",
 		Version: "v1alpha1",
@@ -41,26 +43,34 @@ var (
 	}
 )
 
+// MockResourceOption is used to make manipulations on the *MockResource.
 type MockResourceOption func(*MockResource)
 
+// WithGVK returns a MockResourceOption that changes GVK of the *MockResource instance.
 func WithGVK(gvk schema.GroupVersionKind) MockResourceOption {
 	return func(r *MockResource) {
 		r.SetGroupVersionKind(gvk)
 	}
 }
 
-func WithAnnotations(a map[string]string) MockResourceOption {
+// WithAdditionalAnnotations returns a MockResourceOption that adds given map as annotations
+// to the *MockResource instance.
+func WithAdditionalAnnotations(a map[string]string) MockResourceOption {
 	return func(r *MockResource) {
 		meta.AddAnnotations(r, a)
 	}
 }
 
-func WithLabels(a map[string]string) MockResourceOption {
+// WithAdditionalLabels returns a MockResourceOption that adds given map as labels
+// to the *MockResource instance.
+func WithAdditionalLabels(a map[string]string) MockResourceOption {
 	return func(r *MockResource) {
 		meta.AddLabels(r, a)
 	}
 }
 
+// WithOwnerReferenceTo returns a MockResourceOption that adds an OwnerReference
+// that points to the given object to the *MockResource instance.
 func WithOwnerReferenceTo(o metav1.Object, gvk schema.GroupVersionKind) MockResourceOption {
 	return func(r *MockResource) {
 		ref := meta.AsOwner(meta.ReferenceTo(o, gvk))
@@ -70,6 +80,8 @@ func WithOwnerReferenceTo(o metav1.Object, gvk schema.GroupVersionKind) MockReso
 	}
 }
 
+// WithNamespaceName returns a MockResourceOption that changes name and namespace
+// of the *MockResource instance.
 func WithNamespaceName(name, ns string) MockResourceOption {
 	return func(r *MockResource) {
 		r.SetName(name)
@@ -77,6 +89,7 @@ func WithNamespaceName(name, ns string) MockResourceOption {
 	}
 }
 
+// FromYAML unmarshals given YAML into the *MockResource instance.
 func FromYAML(y []byte) MockResourceOption {
 	return func(r *MockResource) {
 		dec := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(y), 4096)
@@ -87,6 +100,7 @@ func FromYAML(y []byte) MockResourceOption {
 	}
 }
 
+// NewMockResource returns a new instance of *MockResource.
 func NewMockResource(o ...MockResourceOption) *MockResource {
 	p := &MockResource{}
 	p.SetLabels(map[string]string{})
@@ -99,6 +113,7 @@ func NewMockResource(o ...MockResourceOption) *MockResource {
 	return p
 }
 
+// MockResource is a helper struct to be used in tests.
 type MockResource struct {
 	unstructured.Unstructured
 }
