@@ -60,7 +60,6 @@ func TestReconcile(t *testing.T) {
 		opts []TemplatingReconcilerOption
 	}
 	type want struct {
-		cr     resource.ParentResource
 		result reconcile.Result
 		err    error
 	}

@@ -19,13 +19,11 @@ package resource
 import (
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
-
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 	"github.com/crossplane/crossplane/pkg/stacks"
+	"github.com/google/go-cmp/cmp"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/crossplane/templating-controller/pkg/resource/fake"
 )
@@ -33,7 +31,6 @@ import (
 const (
 	name      = "fakename"
 	namespace = "fakenamespace"
-	uid       = types.UID("9e23-sda231-sad")
 )
 
 var (
@@ -52,7 +49,6 @@ type args struct {
 type want struct {
 	result []ChildResource
 	err    error
-	reason string
 }
 
 func TestDefaultingAnnotationRemover(t *testing.T) {

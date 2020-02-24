@@ -116,7 +116,6 @@ func NewTemplatingReconciler(m manager.Manager, of schema.GroupVersionKind, opti
 type TemplatingReconciler struct {
 	kube              client.Client
 	newParentResource func() resource.ParentResource
-	resourcePath      string
 	shortWait         time.Duration
 	longWait          time.Duration
 	log               logging.Logger

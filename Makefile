@@ -1,34 +1,35 @@
+# Project Setup
+PROJECT_NAME := templating-controller
+PROJECT_REPO := github.com/crossplane/$(PROJECT_NAME)
 
-# Image URL to use all building/pushing image targets
-IMG ?= crossplane/templating-controller
-VERSION ?= "v0.2.1"
+PLATFORMS ?= linux_amd64 linux_arm64
+include build/makelib/common.mk
 
-all: test docker-build
+# ====================================================================================
+# Setup Go
 
-# Run tests
-test: fmt vet
-	go test ./... -coverprofile cover.out
+# Set a sane default so that the nprocs calculation below is less noisy on the initial
+# loading of this file
+NPROCS ?= 1
 
-# Build manager binary
-manager: fmt vet
-	go build -o bin/manager main.go
+# each of our test suites starts a kube-apiserver and running many test suites in
+# parallel can lead to high CPU utilization. by default we reduce the parallelism
+# to half the number of CPU cores.
+GO_TEST_PARALLEL := $(shell echo $$(( $(NPROCS) / 2 )))
 
-# Run against the configured Kubernetes cluster in ~/.kube/config
-run: fmt vet manifests
-	go run ./main.go
+GO_STATIC_PACKAGES = $(GO_PROJECT)/cmd/templating-controller
+GO_LDFLAGS += -X $(GO_PROJECT)/pkg/version.Version=$(VERSION)
+GO_SUBDIRS += cmd pkg
+GO111MODULE = on
+include build/makelib/golang.mk
 
-# Run go fmt against code
-fmt:
-	go fmt ./...
+# Docker images
+DOCKER_REGISTRY = crossplane
+IMAGES = templating-controller
+include build/makelib/image.mk
 
-# Run go vet against code
-vet:
-	go vet ./...
+generate: go.generate
 
-# Build the docker image
-docker-build: test
-	docker build . -t ${IMG}:${VERSION}
-
-# Push the docker image
-docker-push:
-	docker push ${IMG}:${VERSION}
+# Ensure a PR is ready for review.
+reviewable: generate lint
+	@go mod tidy
