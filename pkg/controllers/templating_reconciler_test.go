@@ -54,22 +54,6 @@ func withNewParentResourceFunc(f func() resource.ParentResource) TemplatingRecon
 	}
 }
 
-type MockParentResourceOption func(*fake.MockResource)
-
-func withDeletionTimestamp(c *metav1.Time) MockParentResourceOption {
-	return func(cr *fake.MockResource) {
-		cr.SetDeletionTimestamp(c)
-	}
-}
-
-func mockParentResource(opts ...MockParentResourceOption) *fake.MockResource {
-	cr := &fake.MockResource{}
-	for _, f := range opts {
-		f(cr)
-	}
-	return cr
-}
-
 func TestReconcile(t *testing.T) {
 	type args struct {
 		kube client.Client

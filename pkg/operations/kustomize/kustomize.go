@@ -32,13 +32,12 @@ import (
 )
 
 const (
-	defaultRootPath       = "resources"
-	templateFileName      = "kustomization.yaml.tmpl"
+	defaultResourcesPath  = "resources"
 	kustomizationFileName = "kustomization.yaml"
-	temporaryCRFileName   = "cr.yaml"
 
 	errPatch              = "patch call failed"
 	errOverlayPreparation = "overlay preparation failed"
+	errOverlayGeneration  = "overlay generation failed"
 	errKustomizeCall      = "kustomize call failed"
 )
 
@@ -71,7 +70,7 @@ func AdditionalOverlayGenerator(op ...OverlayGenerator) Option {
 // object.
 func NewKustomizeEngine(k *kustomizeapi.Kustomization, opt ...Option) *Engine {
 	ko := &Engine{
-		ResourcePath:  defaultRootPath,
+		ResourcePath:  defaultResourcesPath,
 		Kustomization: k,
 		Patchers: KustomizationPatcherChain{
 			// TODO(muvaf): think how this should work if name prefix is already
@@ -111,7 +110,7 @@ func (o *Engine) Run(cr resource.ParentResource) ([]resource.ChildResource, erro
 	}
 	extraFiles, err := o.OverlayGenerators.Generate(cr, o.Kustomization)
 	if err != nil {
-		return nil, errors.Wrap(err, "overlay generator failed")
+		return nil, errors.Wrap(err, errOverlayGeneration)
 	}
 	dir, err := o.prepareOverlay(o.Kustomization, extraFiles)
 	defer os.RemoveAll(dir)

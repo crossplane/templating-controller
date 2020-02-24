@@ -18,9 +18,12 @@ package helm3
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
+
+	"github.com/pkg/errors"
+
+	"github.com/crossplane/crossplane-runtime/pkg/logging"
 
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart/loader"
@@ -32,11 +35,26 @@ import (
 
 const (
 	defaultRootPath = "resources"
+
+	errEmptyParentResource = "parent resource is empty"
+	errSpecCast            = "parent resource spec could not be casted into a map[string]interface{}"
+	errParse               = "could not parse the generated YAMLs"
 )
 
 func WithResourcePath(path string) Option {
 	return func(h *Engine) {
 		h.ResourcePath = path
+	}
+}
+
+func WithLogger(l logging.Logger) Option {
+	return func(h *Engine) {
+		// NOTE(muvaf): Even though l.Debug seems to satisfy action.DebugLog interface,
+		// they are completely different given that former user the first argument
+		// as context while the latter uses it as format string.
+		h.log = func(format string, v ...interface{}) {
+			l.Debug(fmt.Sprintf(format, v...))
+		}
 	}
 }
 
@@ -54,6 +72,9 @@ type Engine struct {
 	// ResourcePath is the folder that the base resources reside in the
 	// filesystem. It should be given as absolute path.
 	ResourcePath string
+
+	// log is used by helm library to log the debugging level logs.
+	log action.DebugLog
 }
 
 func (h *Engine) Run(cr resource.ParentResource) ([]resource.ChildResource, error) {
@@ -65,29 +86,30 @@ func (h *Engine) Run(cr resource.ParentResource) ([]resource.ChildResource, erro
 	// NOTE(muvaf): RESTGetter is skipped because we don't need to talk with cluster.
 	// namespace is skipped because we use "memory" as storage rather than actual
 	// ConfigMap or Secret objects.
-	if err := config.Init(nil, "", "memory", func(format string, v ...interface{}) {
-		// TODO(muvaf): look for better handling of logging.
-		fmt.Printf(format, v)
-	}); err != nil {
+	if err := config.Init(nil, "", "memory", h.log); err != nil {
 		return nil, err
 	}
-	i := action.NewInstall(&config)
-	i.DryRun = true
-	i.ReleaseName = cr.GetName()
-	i.Replace = true // Skip the name check
-	i.ClientOnly = true
 
-	// TODO(muvaf): We will need to implement a transformation mechanism here
-	// to manipulate spec field as user desires instead of copying it directly
-	// like savages.
-	values := map[string]interface{}{}
-	if valuesMap, exists := cr.UnstructuredContent()["spec"]; exists {
-		if valuesCasted, ok := valuesMap.(map[string]interface{}); !ok {
-			return nil, errors.New("spec could not be parsed into a map")
-		} else {
-			values = valuesCasted
-		}
+	if cr.UnstructuredContent() == nil {
+		return nil, errors.New(errEmptyParentResource)
 	}
+	values := map[string]interface{}{}
+	valuesMap, exists := cr.UnstructuredContent()["spec"]
+	if exists {
+		valuesCasted, ok := valuesMap.(map[string]interface{})
+		if !ok {
+			return nil, errors.New(errSpecCast)
+		}
+		values = valuesCasted
+	}
+
+	i := action.NewInstall(&config)
+	i.ReleaseName = cr.GetName()
+
+	// NOTE(muvaf): These settings are same with `helm template`'s call settings.
+	i.DryRun = true
+	i.Replace = true
+	i.ClientOnly = true
 
 	release, err := i.Run(chart, values)
 	if err != nil {
@@ -103,7 +125,7 @@ func parse(source []byte) ([]resource.ChildResource, error) {
 		u := &unstructured.Unstructured{}
 		err := dec.Decode(u)
 		if err != nil && err != io.EOF {
-			return nil, err
+			return nil, errors.Wrap(err, errParse)
 		}
 		if err == io.EOF {
 			break

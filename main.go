@@ -99,8 +99,10 @@ func main() {
 		// logger when we're running in debug mode.
 		ctrl.SetLogger(zl)
 	}
+	crLogger := logging.NewLogrLogger(zl.WithName(gvk.GroupKind().String()))
+
 	options := []controllers.TemplatingReconcilerOption{
-		controllers.WithLogger(logging.NewLogrLogger(zl.WithName(gvk.GroupKind().String()))),
+		controllers.WithLogger(crLogger),
 	}
 	switch sd.Spec.Behavior.Engine.Type {
 	case KustomizeEngine:
@@ -117,7 +119,8 @@ func main() {
 	case Helm3Engine:
 		options = append(options,
 			controllers.WithTemplatingEngine(helm3.NewHelm3Engine(
-				helm3.WithResourcePath(*resourceDirInput)),
+				helm3.WithResourcePath(*resourceDirInput),
+				helm3.WithLogger(crLogger)),
 			),
 		)
 	default:
@@ -138,7 +141,7 @@ func main() {
 // TODO: Controller-runtime client doesn't work until manager is started, which
 // is a blocking operation. So, we can't call any controller-runtime client functions
 // here in main.go
-// Instead, we use rest client directly for the time being.
+// Instead, we use rest client to make one call directly for the time being.
 func getStackDefinition(sd *v1alpha1.StackDefinition) error {
 	config := ctrl.GetConfigOrDie()
 	config.ContentConfig.GroupVersion = &v1alpha1.SchemeGroupVersion
