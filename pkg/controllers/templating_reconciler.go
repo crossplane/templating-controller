@@ -147,40 +147,46 @@ type TemplatingReconciler struct {
 func (r *TemplatingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), reconcileTimeout)
 	defer cancel()
+	log := r.log.WithValues("parent-resource", req)
 
 	cr := r.newParentResource()
 	if err := r.kube.Get(ctx, req.NamespacedName, cr); err != nil {
 		// There's no need to requeue if the resource no longer exists. Otherwise
 		// we'll be requeued implicitly because we return an error.
-		return reconcile.Result{Requeue: false}, errors.Wrap(client.IgnoreNotFound(err), errGetResource)
+		log.Info("Cannot get the requested resource", "error", err)
+		return reconcile.Result{Requeue: false}, errors.Wrap(err, errGetResource)
 	}
 
 	if meta.WasDeleted(cr) {
 		// We have nothing to do as the child resources will be garbage collected
 		// by Kubernetes.
+		log.Debug("Skipping reconciliation since the resource is requested to be deleted")
 		return reconcile.Result{Requeue: false}, nil
 	}
 
 	childResources, err := r.templatingEngine.Run(cr)
 	if err != nil {
-		r.onlyLog(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errTemplatingOperation))))
+		log.Info("Cannot run templating operation", "error", err)
+		omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errTemplatingOperation))))
 		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 
 	childResources, err = r.childResourcePatcher.Patch(cr, childResources)
 	if err != nil {
-		r.onlyLog(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errChildResourcePatchers))))
+		log.Info("Cannot run patchers on the child resources", "error", err)
+		omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errChildResourcePatchers))))
 		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 
 	for _, o := range childResources {
 		if err := Apply(ctx, r.kube, o); err != nil {
-			r.onlyLog(resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, fmt.Sprintf("%s: %s/%s of type %s", errApply, o.GetName(), o.GetNamespace(), o.GetObjectKind().GroupVersionKind().String())))))
+			log.Info("Cannot apply the changes to the child resources", "error", err)
+			omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, fmt.Sprintf("%s: %s/%s of type %s", errApply, o.GetName(), o.GetNamespace(), o.GetObjectKind().GroupVersionKind().String())))))
 			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 		}
 	}
-
-	r.onlyLog(resource.SetConditions(cr, v1alpha1.ReconcileSuccess()))
+	log.Debug("Reconciliation finished with success")
+	omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileSuccess()))
 	return ctrl.Result{RequeueAfter: r.longWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 }
 
@@ -201,8 +207,8 @@ func Apply(ctx context.Context, kube client.Client, o resource.ChildResource) er
 	return kube.Patch(ctx, existing, client.ConstantPatch(types.MergePatchType, patchJSON))
 }
 
-func (r *TemplatingReconciler) onlyLog(err error) {
+func omitError(log logging.Logger, err error) {
 	if err != nil {
-		r.log.Info(err.Error())
+		log.Info("Omitted the non-fatal error", "error", err)
 	}
 }

@@ -54,8 +54,8 @@ func WithLogger(l logging.Logger) Option {
 		// NOTE(muvaf): Even though l.Debug seems to satisfy action.DebugLog interface,
 		// they are completely different given that former user the first argument
 		// as context while the latter uses it as format string.
-		h.log = func(format string, v ...interface{}) {
-			l.Debug(fmt.Sprintf(format, v...))
+		h.debugLog = func(format string, v ...interface{}) {
+			l.Debug("Helm3", "debuglog", fmt.Sprintf(format, v...))
 		}
 	}
 }
@@ -77,8 +77,8 @@ type Engine struct {
 	// filesystem. It should be given as absolute path.
 	ResourcePath string
 
-	// log is used by helm library to log the debugging level logs.
-	log action.DebugLog
+	// debugLog is used by helm library to debugLog the debugging level logs.
+	debugLog action.DebugLog
 }
 
 // Run returns the result of the templating operation.
@@ -91,7 +91,7 @@ func (h *Engine) Run(cr resource.ParentResource) ([]resource.ChildResource, erro
 	// NOTE(muvaf): RESTGetter is skipped because we don't need to talk with cluster.
 	// namespace is skipped because we use "memory" as storage rather than actual
 	// ConfigMap or Secret objects.
-	if err := config.Init(nil, "", "memory", h.log); err != nil {
+	if err := config.Init(nil, "", "memory", h.debugLog); err != nil {
 		return nil, err
 	}
 

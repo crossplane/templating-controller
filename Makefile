@@ -3,7 +3,7 @@ PROJECT_NAME := templating-controller
 PROJECT_REPO := github.com/crossplane/$(PROJECT_NAME)
 
 PLATFORMS ?= linux_amd64 linux_arm64
-include build/makelib/common.mk
+-include build/makelib/common.mk
 
 # ====================================================================================
 # Setup Go
@@ -21,15 +21,31 @@ GO_STATIC_PACKAGES = $(GO_PROJECT)/cmd/templating-controller
 GO_LDFLAGS += -X $(GO_PROJECT)/pkg/version.Version=$(VERSION)
 GO_SUBDIRS += cmd pkg
 GO111MODULE = on
-include build/makelib/golang.mk
+-include build/makelib/golang.mk
 
 # Docker images
 DOCKER_REGISTRY = crossplane
 IMAGES = templating-controller
-include build/makelib/image.mk
+-include build/makelib/image.mk
+
+# Update the submodules, such as the common build scripts.
+submodules:
+	@git submodule sync
+	@git submodule update --init --recursive
+
+# We want submodules to be set up the first time `make` is run.
+# We manage the build/ folder and its Makefiles as a submodule.
+# The first time `make` is run, the includes of build/*.mk files will
+# all fail, and this target will be run. The next time, the default as defined
+# by the includes will be run instead.
+fallthrough: submodules
+	@echo Initial setup complete. Running make again . . .
+	@make
 
 generate: go.generate
 
 # Ensure a PR is ready for review.
 reviewable: generate lint
 	@go mod tidy
+
+.PHONY: fallthrough submodules generate reviewable
