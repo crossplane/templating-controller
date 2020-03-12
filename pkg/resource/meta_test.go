@@ -20,15 +20,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/crossplane/crossplane-runtime/pkg/test"
 	"github.com/google/go-cmp/cmp"
-
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/crossplane/templating-controller/pkg/resource/fake"
-
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	"github.com/crossplane/crossplane-runtime/pkg/test"
+
+	"github.com/crossplane/templating-controller/pkg/resource/fake"
 )
 
 const conditionedUnstructured = `

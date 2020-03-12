@@ -21,7 +21,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
@@ -33,7 +32,6 @@ import (
 const (
 	name      = "fakename"
 	namespace = "fakenamespace"
-	uid       = types.UID("9e23-sda231-sad")
 )
 
 var (
@@ -52,7 +50,6 @@ type args struct {
 type want struct {
 	result []ChildResource
 	err    error
-	reason string
 }
 
 func TestDefaultingAnnotationRemover(t *testing.T) {
@@ -64,22 +61,22 @@ func TestDefaultingAnnotationRemover(t *testing.T) {
 			args: args{
 				cr: fake.NewMockResource(),
 				list: []ChildResource{
-					fake.NewMockResource(fake.WithAnnotations(map[string]string{v1alpha1.AnnotationDefaultClassKey: v1alpha1.AnnotationDefaultClassValue})),
-					fake.NewMockResource(fake.WithAnnotations(map[string]string{v1alpha1.AnnotationDefaultClassKey: v1alpha1.AnnotationDefaultClassValue})),
+					fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{v1alpha1.AnnotationDefaultClassKey: v1alpha1.AnnotationDefaultClassValue})),
+					fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{v1alpha1.AnnotationDefaultClassKey: v1alpha1.AnnotationDefaultClassValue})),
 				},
 			},
 			want: want{
 				result: []ChildResource{
-					fake.NewMockResource(fake.WithAnnotations(map[string]string{v1alpha1.AnnotationDefaultClassKey: v1alpha1.AnnotationDefaultClassValue})),
-					fake.NewMockResource(fake.WithAnnotations(map[string]string{v1alpha1.AnnotationDefaultClassKey: v1alpha1.AnnotationDefaultClassValue})),
+					fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{v1alpha1.AnnotationDefaultClassKey: v1alpha1.AnnotationDefaultClassValue})),
+					fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{v1alpha1.AnnotationDefaultClassKey: v1alpha1.AnnotationDefaultClassValue})),
 				},
 			},
 		},
 		"RemoveAnnotation": {
 			args: args{
-				cr: fake.NewMockResource(fake.WithAnnotations(map[string]string{RemoveDefaultAnnotationsKey: RemoveDefaultAnnotationsTrueValue})),
+				cr: fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{RemoveDefaultAnnotationsKey: RemoveDefaultAnnotationsTrueValue})),
 				list: []ChildResource{
-					fake.NewMockResource(fake.WithAnnotations(map[string]string{v1alpha1.AnnotationDefaultClassKey: v1alpha1.AnnotationDefaultClassValue})),
+					fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{v1alpha1.AnnotationDefaultClassKey: v1alpha1.AnnotationDefaultClassValue})),
 					fake.NewMockResource(),
 				},
 			},
@@ -216,7 +213,7 @@ func TestLabelPropagator(t *testing.T) {
 	}{
 		"AllNew": {
 			args: args{
-				cr: fake.NewMockResource(fake.WithLabels(labels)),
+				cr: fake.NewMockResource(fake.WithAdditionalLabels(labels)),
 				list: []ChildResource{
 					fake.NewMockResource(),
 					fake.NewMockResource(),
@@ -224,8 +221,8 @@ func TestLabelPropagator(t *testing.T) {
 			},
 			want: want{
 				result: []ChildResource{
-					fake.NewMockResource(fake.WithLabels(labels)),
-					fake.NewMockResource(fake.WithLabels(labels)),
+					fake.NewMockResource(fake.WithAdditionalLabels(labels)),
+					fake.NewMockResource(fake.WithAdditionalLabels(labels)),
 				},
 			},
 		},
@@ -260,8 +257,8 @@ func TestParentLabelSetAdded(t *testing.T) {
 			},
 			want: want{
 				result: []ChildResource{
-					fake.NewMockResource(fake.WithLabels(stacks.ParentLabels(parent))),
-					fake.NewMockResource(fake.WithLabels(stacks.ParentLabels(parent))),
+					fake.NewMockResource(fake.WithAdditionalLabels(stacks.ParentLabels(parent))),
+					fake.NewMockResource(fake.WithAdditionalLabels(stacks.ParentLabels(parent))),
 				},
 			},
 		},

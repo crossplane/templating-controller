@@ -31,7 +31,7 @@ import (
 	"github.com/crossplane/templating-controller/pkg/resource"
 )
 
-// NewNamePrefixer returns a new *NamePrefixer.
+// NewVarReferenceFiller returns a new *VarReferenceFiller.
 func NewVarReferenceFiller() VariantFiller {
 	return VariantFiller{}
 }
@@ -48,6 +48,7 @@ func getSchemaGVK(gvk resid.Gvk) schema.GroupVersionKind {
 // correct name and namespace.
 type VariantFiller struct{}
 
+// Patch patches the *types.Kustomization object with information from resource.ParentResource
 func (np VariantFiller) Patch(cr resource.ParentResource, k *types.Kustomization) error {
 	if len(k.Vars) == 0 {
 		return nil
@@ -70,20 +71,22 @@ func NewNamePrefixer() NamePrefixer {
 // in Kustomize.
 type NamePrefixer struct{}
 
+// Patch patches the *types.Kustomization object with information from resource.ParentResource
 func (np NamePrefixer) Patch(cr resource.ParentResource, k *types.Kustomization) error {
 	k.NamePrefix = fmt.Sprintf("%s-", cr.GetName())
 	return nil
 }
 
-// NewNamePrefixer returns a new *NamePrefixer.
+// NewNamespaceNamePrefixer returns a new *NamespaceNamePrefixer.
 func NewNamespaceNamePrefixer() NamespaceNamePrefixer {
 	return NamespaceNamePrefixer{}
 }
 
-// NamePrefixer adds the name of the ParentResource as name prefix to be used
-// in Kustomize.
+// NamespaceNamePrefixer adds the namespace and name of the ParentResource as name
+// prefix to be used in Kustomize.
 type NamespaceNamePrefixer struct{}
 
+// Patch patches the *types.Kustomization object with information from resource.ParentResource
 func (np NamespaceNamePrefixer) Patch(cr resource.ParentResource, k *types.Kustomization) error {
 	k.NamePrefix = fmt.Sprintf("%s-%s-", cr.GetNamespace(), cr.GetName())
 	return nil
@@ -96,12 +99,14 @@ func NewPatchOverlayGenerator(overlays []v1alpha1.KustomizeEngineOverlay) PatchO
 	}
 }
 
-// NamePrefixer adds the name of the ParentResource as name prefix to be used
-// in Kustomize.
+// PatchOverlayGenerator generates PatchStrategicMerge files with the given overlay
+// settings.
 type PatchOverlayGenerator struct {
 	Overlays []v1alpha1.KustomizeEngineOverlay
 }
 
+// Generate produces files to be written to the overlay folder of kustomization
+// process.
 func (pog PatchOverlayGenerator) Generate(cr resource.ParentResource, k *types.Kustomization) ([]OverlayFile, error) {
 	if len(pog.Overlays) == 0 {
 		return nil, nil

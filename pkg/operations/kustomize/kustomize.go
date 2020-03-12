@@ -32,13 +32,12 @@ import (
 )
 
 const (
-	defaultRootPath       = "resources"
-	templateFileName      = "kustomization.yaml.tmpl"
+	defaultResourcesPath  = "resources"
 	kustomizationFileName = "kustomization.yaml"
-	temporaryCRFileName   = "cr.yaml"
 
 	errPatch              = "patch call failed"
 	errOverlayPreparation = "overlay preparation failed"
+	errOverlayGeneration  = "overlay generation failed"
 	errKustomizeCall      = "kustomize call failed"
 )
 
@@ -71,7 +70,7 @@ func AdditionalOverlayGenerator(op ...OverlayGenerator) Option {
 // object.
 func NewKustomizeEngine(k *kustomizeapi.Kustomization, opt ...Option) *Engine {
 	ko := &Engine{
-		ResourcePath:  defaultRootPath,
+		ResourcePath:  defaultResourcesPath,
 		Kustomization: k,
 		Patchers: KustomizationPatcherChain{
 			// TODO(muvaf): think how this should work if name prefix is already
@@ -87,6 +86,8 @@ func NewKustomizeEngine(k *kustomizeapi.Kustomization, opt ...Option) *Engine {
 	return ko
 }
 
+// Engine is satisfies TemplatingEngine interface with an implementation that
+// calls Kustomize for doing the resource generation.
 type Engine struct {
 	// ResourcePath is the folder that the base resources reside in the
 	// filesystem. It should be given as absolute path.
@@ -105,30 +106,37 @@ type Engine struct {
 	OverlayGenerators OverlayGeneratorChain
 }
 
+// Run is called to trigger kustomization operation and returns the generated
+// raw Kubernetes objects.
 func (o *Engine) Run(cr resource.ParentResource) ([]resource.ChildResource, error) {
 	if err := o.Patchers.Patch(cr, o.Kustomization); err != nil {
 		return nil, errors.Wrap(err, errPatch)
 	}
 	extraFiles, err := o.OverlayGenerators.Generate(cr, o.Kustomization)
 	if err != nil {
-		return nil, errors.Wrap(err, "overlay generator failed")
+		return nil, errors.Wrap(err, errOverlayGeneration)
 	}
+
 	dir, err := o.prepareOverlay(o.Kustomization, extraFiles)
-	defer os.RemoveAll(dir)
+	defer func() {
+		_ = os.RemoveAll(dir)
+	}()
 	if err != nil {
 		return nil, errors.Wrap(err, errOverlayPreparation)
 	}
+
 	kustomizer := krusty.MakeKustomizer(filesys.MakeFsOnDisk(), krusty.MakeDefaultOptions())
 	resMap, err := kustomizer.Run(dir)
 	if err != nil {
 		return nil, errors.Wrap(err, errKustomizeCall)
 	}
-	var objects []resource.ChildResource
-	for _, res := range resMap.Resources() {
+
+	objects := make([]resource.ChildResource, len(resMap.Resources()))
+	for i, res := range resMap.Resources() {
 		u := &unstructured.Unstructured{}
 		// NOTE(muvaf): This is magic.
 		u.SetUnstructuredContent(res.Map())
-		objects = append(objects, u)
+		objects[i] = u
 	}
 	return objects, nil
 }
