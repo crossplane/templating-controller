@@ -21,8 +21,6 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/kustomize/api/resid"
 	"sigs.k8s.io/kustomize/api/types"
 	"sigs.k8s.io/yaml"
 
@@ -30,37 +28,6 @@ import (
 
 	"github.com/crossplane/templating-controller/pkg/resource"
 )
-
-// NewVarReferenceFiller returns a new *VarReferenceFiller.
-func NewVarReferenceFiller() VariantFiller {
-	return VariantFiller{}
-}
-
-func getSchemaGVK(gvk resid.Gvk) schema.GroupVersionKind {
-	return schema.GroupVersionKind{
-		Group:   gvk.Group,
-		Version: gvk.Version,
-		Kind:    gvk.Kind,
-	}
-}
-
-// VariantFiller fills the Variants that refer to the ParentResource with the
-// correct name and namespace.
-type VariantFiller struct{}
-
-// Patch patches the *types.Kustomization object with information from resource.ParentResource
-func (np VariantFiller) Patch(cr resource.ParentResource, k *types.Kustomization) error {
-	if len(k.Vars) == 0 {
-		return nil
-	}
-	for i, varRef := range k.Vars {
-		if cr.GetObjectKind().GroupVersionKind() == getSchemaGVK(varRef.ObjRef.GVK()) {
-			k.Vars[i].ObjRef.Name = cr.GetName()
-			k.Vars[i].ObjRef.Namespace = cr.GetNamespace()
-		}
-	}
-	return nil
-}
 
 // NewNamePrefixer returns a new *NamePrefixer.
 func NewNamePrefixer() NamePrefixer {
@@ -74,21 +41,6 @@ type NamePrefixer struct{}
 // Patch patches the *types.Kustomization object with information from resource.ParentResource
 func (np NamePrefixer) Patch(cr resource.ParentResource, k *types.Kustomization) error {
 	k.NamePrefix = fmt.Sprintf("%s-", cr.GetName())
-	return nil
-}
-
-// NewNamespaceNamePrefixer returns a new *NamespaceNamePrefixer.
-func NewNamespaceNamePrefixer() NamespaceNamePrefixer {
-	return NamespaceNamePrefixer{}
-}
-
-// NamespaceNamePrefixer adds the namespace and name of the ParentResource as name
-// prefix to be used in Kustomize.
-type NamespaceNamePrefixer struct{}
-
-// Patch patches the *types.Kustomization object with information from resource.ParentResource
-func (np NamespaceNamePrefixer) Patch(cr resource.ParentResource, k *types.Kustomization) error {
-	k.NamePrefix = fmt.Sprintf("%s-%s-", cr.GetNamespace(), cr.GetName())
 	return nil
 }
 

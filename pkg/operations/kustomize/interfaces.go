@@ -22,7 +22,7 @@ import (
 )
 
 // Option is used to manipulate default Engine parameters.
-type Option func(*Engine)
+type Option func(*engine)
 
 // A Patcher is used to make modifications on Kustomization overlay
 // object before the render.
@@ -39,12 +39,12 @@ func (kof PatcherFunc) Patch(cr resource.ParentResource, k *types.Kustomization)
 	return kof(cr, k)
 }
 
-// KustomizationPatcherChain makes it easier to provide a list of Patcher
+// PatcherChain makes it easier to provide a list of Patcher
 // to be called in order.
-type KustomizationPatcherChain []Patcher
+type PatcherChain []Patcher
 
 // Patch patches the given *types.Kustomization with information in resource.ParentResource.
-func (koc KustomizationPatcherChain) Patch(cr resource.ParentResource, k *types.Kustomization) error {
+func (koc PatcherChain) Patch(cr resource.ParentResource, k *types.Kustomization) error {
 	for _, f := range koc {
 		if err := f.Patch(cr, k); err != nil {
 			return err
@@ -64,6 +64,14 @@ type OverlayFile struct {
 // folder.
 type OverlayGenerator interface {
 	Generate(resource.ParentResource, *types.Kustomization) ([]OverlayFile, error)
+}
+
+// OverlayGeneratorFunc makes it easier to provide only a function as OverlayGenerator.
+type OverlayGeneratorFunc func(cr resource.ParentResource, k *types.Kustomization) ([]OverlayFile, error)
+
+// Generate generates OverlayFiles.
+func (kof OverlayGeneratorFunc) Generate(cr resource.ParentResource, k *types.Kustomization) ([]OverlayFile, error) {
+	return kof(cr, k)
 }
 
 // OverlayGeneratorChain makes it easier to provide a list of OverlayGenerator

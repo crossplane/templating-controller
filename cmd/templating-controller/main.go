@@ -21,7 +21,6 @@ import (
 	"path/filepath"
 
 	"gopkg.in/alecthomas/kingpin.v2"
-	"gopkg.in/yaml.v2"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -107,16 +106,16 @@ func main() {
 	}
 	switch sd.Spec.Behavior.Engine.Type {
 	case KustomizeEngine:
-		// TODO(muvaf): investigate a better way to convert *Unstructured to *Kustomization.
-		kustomizationYAML, err := yaml.Marshal(sd.Spec.Behavior.Engine.Kustomize.Kustomization)
-		kingpin.FatalIfError(err, "cannot marshal kustomization object")
+		kustOpts := []kustomize.Option{kustomize.WithResourcePath(*resourceDirInput)}
 		kustomization := &kustomizeapi.Kustomization{}
-		kingpin.FatalIfError(yaml.Unmarshal(kustomizationYAML, kustomization), "cannot unmarshal into kustomization object")
+		if sd.Spec.Behavior.Engine.Kustomize != nil {
+			kustOpts = append(kustOpts, kustomize.WithOverlayGenerator(kustomize.NewPatchOverlayGenerator(sd.Spec.Behavior.Engine.Kustomize.Overlays)))
+			if sd.Spec.Behavior.Engine.Kustomize.Kustomization != nil {
+				kingpin.FatalIfError(runtime.DefaultUnstructuredConverter.FromUnstructured(sd.Spec.Behavior.Engine.Kustomize.Kustomization.UnstructuredContent(), kustomization), "cannot unmarshal into kustomization object")
+			}
+		}
 		options = append(options,
-			controllers.WithTemplatingEngine(kustomize.NewKustomizeEngine(kustomization,
-				kustomize.WithResourcePath(*resourceDirInput),
-				kustomize.AdditionalOverlayGenerator(kustomize.NewPatchOverlayGenerator(sd.Spec.Behavior.Engine.Kustomize.Overlays)),
-			)))
+			controllers.WithTemplatingEngine(kustomize.NewKustomizeEngine(kustomization, kustOpts...)))
 	case Helm3Engine:
 		options = append(options,
 			controllers.WithTemplatingEngine(helm3.NewHelm3Engine(
