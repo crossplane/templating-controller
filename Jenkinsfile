@@ -17,7 +17,6 @@ pipeline {
         DOCKER = credentials('dockerhub-upboundci')
         AWS = credentials('aws-upbound-bot')
         GITHUB_UPBOUND_BOT = credentials('github-upbound-jenkins')
-        CODECOV_TOKEN = credentials('codecov-provider-gcp')
     }
 
     stages {
@@ -26,7 +25,7 @@ pipeline {
             steps {
                 script {
                     if (env.CHANGE_ID != null) {
-                        def json = sh (script: "curl -s https://api.github.com/repos/crossplane/provider-gcp/pulls/${env.CHANGE_ID}", returnStdout: true).trim()
+                        def json = sh (script: "curl -s https://api.github.com/repos/${REPOSITORY_OWNER}/${REPOSITORY_NAME}/pulls/${env.CHANGE_ID}", returnStdout: true).trim()
                         def body = evaluateJson(json,'${json.body}')
                         if (body.contains("[skip ci]")) {
                             echo ("'[skip ci]' spotted in PR body text.")
@@ -46,7 +45,6 @@ pipeline {
                 }
             }
             steps {
-                sh './build/run make check-diff'
                 sh './build/run make vendor.check'
                 sh './build/run make -j\$(nproc) build.all'
             }
@@ -65,27 +63,11 @@ pipeline {
             }
             steps {
                 sh './build/run make -j\$(nproc) test'
-                sh './build/run make -j\$(nproc) cobertura'
             }
             post {
                 always {
                     archiveArtifacts "_output/tests/**/*"
                     junit "_output/tests/**/unit-tests.xml"
-                    cobertura coberturaReportFile: '_output/tests/**/cobertura-coverage.xml',
-                            classCoverageTargets: '50, 0, 0',
-                            conditionalCoverageTargets: '70, 0, 0',
-                            lineCoverageTargets: '40, 0, 0',
-                            methodCoverageTargets: '30, 0, 0',
-                            packageCoverageTargets: '80, 0, 0',
-                            autoUpdateHealth: false,
-                            autoUpdateStability: false,
-                            enableNewApi: false,
-                            failUnhealthy: false,
-                            failUnstable: false,
-                            maxNumberOfBuilds: 0,
-                            onlyStable: false,
-                            sourceEncoding: 'ASCII',
-                            zoomCoverageChart: false
                 }
             }
         }
@@ -98,19 +80,6 @@ pipeline {
             }
             steps {
                 sh './build/run make -j\$(nproc) e2e'
-            }
-        }
-        
-        stage('Publish Coverage to Codecov') {
-            when {
-                expression {
-                    return env.shouldBuild != "false"
-                }
-            }
-            steps {
-                script {
-                    sh 'curl -s https://codecov.io/bash | bash -s -- -c -f _output/tests/**/coverage.txt -F unittests'
-                }
             }
         }
 
