@@ -1,0 +1,7 @@
+overlays:
+  - apiVersion: database.crossplane.io/v1alpha1
+    kind: MySQLInstance
+    name: sql
+    bindings:
+      - from: "spec.engineVersion"
+        to: "spec.engineVersion"

@@ -17,5 +17,4 @@ package kustomize
 
 var (
 	_ Patcher = NamePrefixer{}
-	_ Patcher = NamespaceNamePrefixer{}
 )

@@ -1,0 +1,7 @@
+---
+apiVersion: templating-controller.crossplane.io/v1alpha1
+kind: KustomizeTest
+metadata:
+  name: test
+spec:
+  engineVersion: "5.7"

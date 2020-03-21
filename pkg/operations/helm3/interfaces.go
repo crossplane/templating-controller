@@ -16,5 +16,5 @@ limitations under the License.
 
 package helm3
 
-// Option is used to manipulate the given *Engine instance.
-type Option func(*Engine)
+// Option is used to manipulate the given *engine instance.
+type Option func(*engine)
