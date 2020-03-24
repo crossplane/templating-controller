@@ -17,6 +17,7 @@ pipeline {
         DOCKER = credentials('dockerhub-upboundci')
         AWS = credentials('aws-upbound-bot')
         GITHUB_UPBOUND_BOT = credentials('github-upbound-jenkins')
+        CODECOV_TOKEN = credentials('codecov-templating-controller')
     }
 
     stages {
@@ -63,11 +64,27 @@ pipeline {
             }
             steps {
                 sh './build/run make -j\$(nproc) test'
+                sh './build/run make -j\$(nproc) cobertura'
             }
             post {
                 always {
                     archiveArtifacts "_output/tests/**/*"
                     junit "_output/tests/**/unit-tests.xml"
+                    cobertura coberturaReportFile: '_output/tests/**/cobertura-coverage.xml',
+                            classCoverageTargets: '50, 0, 0',
+                            conditionalCoverageTargets: '70, 0, 0',
+                            lineCoverageTargets: '40, 0, 0',
+                            methodCoverageTargets: '30, 0, 0',
+                            packageCoverageTargets: '80, 0, 0',
+                            autoUpdateHealth: false,
+                            autoUpdateStability: false,
+                            enableNewApi: false,
+                            failUnhealthy: false,
+                            failUnstable: false,
+                            maxNumberOfBuilds: 0,
+                            onlyStable: false,
+                            sourceEncoding: 'ASCII',
+                            zoomCoverageChart: false
                 }
             }
         }
@@ -80,6 +97,14 @@ pipeline {
             }
             steps {
                 sh './build/run make -j\$(nproc) e2e'
+            }
+        }
+
+        stage('Publish Coverage to Codecov') {
+            steps {
+                script {
+                    sh 'curl -s https://codecov.io/bash | bash -s -- -c -f _output/tests/**/coverage.txt -F unittests'
+                }
             }
         }
 
