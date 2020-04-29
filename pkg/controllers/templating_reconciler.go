@@ -204,7 +204,7 @@ func Apply(ctx context.Context, kube client.Client, o resource.ChildResource) er
 	if err != nil {
 		return err
 	}
-	return kube.Patch(ctx, existing, client.ConstantPatch(types.MergePatchType, patchJSON))
+	return kube.Patch(ctx, existing, client.RawPatch(types.MergePatchType, patchJSON))
 }
 
 func omitError(log logging.Logger, err error) {
