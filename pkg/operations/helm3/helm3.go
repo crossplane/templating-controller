@@ -139,6 +139,11 @@ func parse(source []byte) ([]resource.ChildResource, error) {
 		if err == io.EOF {
 			break
 		}
+		// Helm does not have any built-in validation like Kustomize, so, we
+		// have to do some basic sanity check to skip empty templates.
+		if u.GetName() == "" || u.GetAPIVersion() == "" || u.GetKind() == "" {
+			continue
+		}
 		result = append(result, u)
 	}
 	return result, nil
