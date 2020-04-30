@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 
@@ -151,5 +152,5 @@ func getStackDefinition(sd *v1alpha1.StackDefinition) error {
 	if err != nil {
 		return err
 	}
-	return client.Get().Name(sd.Name).Namespace(sd.Namespace).Resource("stackdefinitions").Do().Into(sd)
+	return client.Get().Name(sd.Name).Namespace(sd.Namespace).Resource("stackdefinitions").Do(context.Background()).Into(sd)
 }
