@@ -22,7 +22,7 @@ import (
 )
 
 // Option is used to manipulate default Engine parameters.
-type Option func(*engine)
+type Option func(*Engine)
 
 // A Patcher is used to make modifications on Kustomization overlay
 // object before the render.

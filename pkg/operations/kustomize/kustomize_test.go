@@ -51,7 +51,7 @@ func TestEngine_Run(t *testing.T) {
 
 	type args struct {
 		cr resource.ParentResource
-		e  resource.TemplatingEngine
+		e  *Engine
 	}
 	type want struct {
 		result []resource.ChildResource
@@ -65,7 +65,7 @@ func TestEngine_Run(t *testing.T) {
 		"PatcherFailed": {
 			args: args{
 				cr: &unstructured.Unstructured{},
-				e: &engine{
+				e: &Engine{
 					Patchers: []Patcher{PatcherFunc(func(resource.ParentResource, *types.Kustomization) error {
 						return errBoom
 					})},
@@ -78,7 +78,7 @@ func TestEngine_Run(t *testing.T) {
 		"OverlayGeneratorFailed": {
 			args: args{
 				cr: &unstructured.Unstructured{},
-				e: &engine{
+				e: &Engine{
 					OverlayGenerators: []OverlayGenerator{OverlayGeneratorFunc(func(cr resource.ParentResource, k *types.Kustomization) ([]OverlayFile, error) {
 						return nil, errBoom
 					})},

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package templating
 
 import (
 	"context"
@@ -48,8 +48,8 @@ var (
 	errBoom = fmt.Errorf("boom")
 )
 
-func withNewParentResourceFunc(f func() resource.ParentResource) TemplatingReconcilerOption {
-	return func(r *TemplatingReconciler) {
+func withNewParentResourceFunc(f func() resource.ParentResource) ReconcilerOption {
+	return func(r *Reconciler) {
 		r.newParentResource = f
 	}
 }
@@ -57,7 +57,7 @@ func withNewParentResourceFunc(f func() resource.ParentResource) TemplatingRecon
 func TestReconcile(t *testing.T) {
 	type args struct {
 		kube client.Client
-		opts []TemplatingReconcilerOption
+		opts []ReconcilerOption
 	}
 	type want struct {
 		result reconcile.Result
@@ -106,8 +106,8 @@ func TestReconcile(t *testing.T) {
 						return nil
 					}),
 				},
-				opts: []TemplatingReconcilerOption{
-					WithTemplatingEngine(resource.TemplatingEngineFunc(func(_ resource.ParentResource) ([]resource.ChildResource, error) {
+				opts: []ReconcilerOption{
+					WithEngine(EngineFunc(func(_ resource.ParentResource) ([]resource.ChildResource, error) {
 						return nil, errBoom
 					})),
 				},
@@ -133,9 +133,9 @@ func TestReconcile(t *testing.T) {
 						return nil
 					}),
 				},
-				opts: []TemplatingReconcilerOption{
-					WithTemplatingEngine(&resource.NopTemplatingEngine{}),
-					WithChildResourcePatcher(resource.ChildResourcePatcherFunc(func(_ resource.ParentResource, _ []resource.ChildResource) ([]resource.ChildResource, error) {
+				opts: []ReconcilerOption{
+					WithEngine(&NopEngine{}),
+					WithChildResourcePatcher(ChildResourcePatcherFunc(func(_ resource.ParentResource, _ []resource.ChildResource) ([]resource.ChildResource, error) {
 						return nil, errBoom
 					})),
 				},
@@ -165,9 +165,9 @@ func TestReconcile(t *testing.T) {
 						return nil
 					}),
 				},
-				opts: []TemplatingReconcilerOption{
-					WithTemplatingEngine(&resource.NopTemplatingEngine{}),
-					WithChildResourcePatcher(resource.ChildResourcePatcherFunc(func(_ resource.ParentResource, _ []resource.ChildResource) ([]resource.ChildResource, error) {
+				opts: []ReconcilerOption{
+					WithEngine(&NopEngine{}),
+					WithChildResourcePatcher(ChildResourcePatcherFunc(func(_ resource.ParentResource, _ []resource.ChildResource) ([]resource.ChildResource, error) {
 						res := fake.NewMockResource()
 						res.SetName(fakeName)
 						res.SetNamespace(fakeNamespace)
@@ -201,9 +201,9 @@ func TestReconcile(t *testing.T) {
 						return nil
 					}),
 				},
-				opts: []TemplatingReconcilerOption{
-					WithTemplatingEngine(&resource.NopTemplatingEngine{}),
-					WithChildResourcePatcher(resource.ChildResourcePatcherFunc(func(_ resource.ParentResource, _ []resource.ChildResource) ([]resource.ChildResource, error) {
+				opts: []ReconcilerOption{
+					WithEngine(&NopEngine{}),
+					WithChildResourcePatcher(ChildResourcePatcherFunc(func(_ resource.ParentResource, _ []resource.ChildResource) ([]resource.ChildResource, error) {
 						return nil, nil
 					})),
 				},
@@ -224,7 +224,7 @@ func TestReconcile(t *testing.T) {
 				cr.SetGroupVersionKind(schema.EmptyObjectKind.GroupVersionKind())
 				return cr
 			}))
-			r := NewTemplatingReconciler(mgr, (&fake.MockResource{}).GroupVersionKind(), tc.args.opts...)
+			r := NewReconciler(mgr, (&fake.MockResource{}).GroupVersionKind(), tc.args.opts...)
 			result, err := r.Reconcile(reconcile.Request{})
 
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {

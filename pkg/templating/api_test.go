@@ -14,10 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package resource
+package templating
 
 import (
 	"testing"
+
+	"github.com/crossplane/templating-controller/pkg/resource"
 
 	"github.com/google/go-cmp/cmp"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -43,12 +45,12 @@ var (
 )
 
 type args struct {
-	cr   ParentResource
-	list []ChildResource
+	cr   resource.ParentResource
+	list []resource.ChildResource
 }
 
 type want struct {
-	result []ChildResource
+	result []resource.ChildResource
 	err    error
 }
 
@@ -60,13 +62,13 @@ func TestDefaultingAnnotationRemover(t *testing.T) {
 		"KeepAnnotated": {
 			args: args{
 				cr: fake.NewMockResource(),
-				list: []ChildResource{
+				list: []resource.ChildResource{
 					fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{v1alpha1.AnnotationDefaultClassKey: v1alpha1.AnnotationDefaultClassValue})),
 					fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{v1alpha1.AnnotationDefaultClassKey: v1alpha1.AnnotationDefaultClassValue})),
 				},
 			},
 			want: want{
-				result: []ChildResource{
+				result: []resource.ChildResource{
 					fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{v1alpha1.AnnotationDefaultClassKey: v1alpha1.AnnotationDefaultClassValue})),
 					fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{v1alpha1.AnnotationDefaultClassKey: v1alpha1.AnnotationDefaultClassValue})),
 				},
@@ -75,13 +77,13 @@ func TestDefaultingAnnotationRemover(t *testing.T) {
 		"RemoveAnnotation": {
 			args: args{
 				cr: fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{RemoveDefaultAnnotationsKey: RemoveDefaultAnnotationsTrueValue})),
-				list: []ChildResource{
+				list: []resource.ChildResource{
 					fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{v1alpha1.AnnotationDefaultClassKey: v1alpha1.AnnotationDefaultClassValue})),
 					fake.NewMockResource(),
 				},
 			},
 			want: want{
-				result: []ChildResource{
+				result: []resource.ChildResource{
 					fake.NewMockResource(),
 					fake.NewMockResource(),
 				},
@@ -115,7 +117,7 @@ func TestOwnerReferenceAdder(t *testing.T) {
 		"Add": {
 			args: args{
 				cr: parent,
-				list: []ChildResource{
+				list: []resource.ChildResource{
 					fake.NewMockResource(),
 					fake.NewMockResource(),
 					fake.NewMockResource(fake.WithGVK(schema.GroupVersionKind{
@@ -126,7 +128,7 @@ func TestOwnerReferenceAdder(t *testing.T) {
 				},
 			},
 			want: want{
-				result: []ChildResource{
+				result: []resource.ChildResource{
 					fake.NewMockResource(fake.WithOwnerReferenceTo(parent, parent.GroupVersionKind())),
 					fake.NewMockResource(fake.WithOwnerReferenceTo(parent, parent.GroupVersionKind())),
 					fake.NewMockResource(fake.WithGVK(schema.GroupVersionKind{
@@ -160,13 +162,13 @@ func TestNamespacePatcher(t *testing.T) {
 		"Patch": {
 			args: args{
 				cr: fake.NewMockResource(fake.WithNamespaceName("", namespace)),
-				list: []ChildResource{
+				list: []resource.ChildResource{
 					fake.NewMockResource(),
 					fake.NewMockResource(),
 				},
 			},
 			want: want{
-				result: []ChildResource{
+				result: []resource.ChildResource{
 					fake.NewMockResource(fake.WithNamespaceName("", namespace)),
 					fake.NewMockResource(fake.WithNamespaceName("", namespace)),
 				},
@@ -175,13 +177,13 @@ func TestNamespacePatcher(t *testing.T) {
 		"KeepExistingNamespace": {
 			args: args{
 				cr: fake.NewMockResource(fake.WithNamespaceName("", namespace)),
-				list: []ChildResource{
+				list: []resource.ChildResource{
 					fake.NewMockResource(fake.WithNamespaceName("", "olala")),
 					fake.NewMockResource(),
 				},
 			},
 			want: want{
-				result: []ChildResource{
+				result: []resource.ChildResource{
 					fake.NewMockResource(fake.WithNamespaceName("", "olala")),
 					fake.NewMockResource(fake.WithNamespaceName("", namespace)),
 				},
@@ -214,13 +216,13 @@ func TestLabelPropagator(t *testing.T) {
 		"AllNew": {
 			args: args{
 				cr: fake.NewMockResource(fake.WithAdditionalLabels(labels)),
-				list: []ChildResource{
+				list: []resource.ChildResource{
 					fake.NewMockResource(),
 					fake.NewMockResource(),
 				},
 			},
 			want: want{
-				result: []ChildResource{
+				result: []resource.ChildResource{
 					fake.NewMockResource(fake.WithAdditionalLabels(labels)),
 					fake.NewMockResource(fake.WithAdditionalLabels(labels)),
 				},
@@ -250,13 +252,13 @@ func TestParentLabelSetAdded(t *testing.T) {
 		"AllNew": {
 			args: args{
 				cr: parent,
-				list: []ChildResource{
+				list: []resource.ChildResource{
 					fake.NewMockResource(),
 					fake.NewMockResource(),
 				},
 			},
 			want: want{
-				result: []ChildResource{
+				result: []resource.ChildResource{
 					fake.NewMockResource(fake.WithAdditionalLabels(stacks.ParentLabels(parent))),
 					fake.NewMockResource(fake.WithAdditionalLabels(stacks.ParentLabels(parent))),
 				},

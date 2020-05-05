@@ -14,15 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package resource
+package templating
 
 import (
 	"strings"
+
+	"github.com/crossplane/templating-controller/pkg/resource"
 
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
+
 	"github.com/crossplane/crossplane/pkg/stacks"
 )
 
@@ -33,11 +36,11 @@ const (
 	RemoveDefaultAnnotationsTrueValue = "true"
 )
 
-// NopTemplatingEngine is a no-op templating engine.
-type NopTemplatingEngine struct{}
+// NopEngine is a no-op templating engine.
+type NopEngine struct{}
 
 // Run does nothing.
-func (n *NopTemplatingEngine) Run(_ ParentResource) ([]ChildResource, error) {
+func (n *NopEngine) Run(_ resource.ParentResource) ([]resource.ChildResource, error) {
 	return nil, nil
 }
 
@@ -46,13 +49,13 @@ func NewOwnerReferenceAdder() OwnerReferenceAdder {
 	return OwnerReferenceAdder{}
 }
 
-// OwnerReferenceAdder adds owner reference of ParentResource to all ChildResources
+// OwnerReferenceAdder adds owner reference of resource.ParentResource to all resource.ChildResources
 // except the Providers since their deletion should be delayed until all resources
 // refer to them are deleted.
 type OwnerReferenceAdder struct{}
 
-// Patch patches the child resources with information in ParentResource.
-func (lo OwnerReferenceAdder) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
+// Patch patches the child resources with information in resource.ParentResource.
+func (lo OwnerReferenceAdder) Patch(cr resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
 	ref := meta.AsOwner(meta.ReferenceTo(cr, cr.GroupVersionKind()))
 	trueVal := true
 	ref.BlockOwnerDeletion = &trueVal
@@ -81,8 +84,8 @@ func NewDefaultingAnnotationRemover() DefaultingAnnotationRemover {
 // if it is requested through the special annotation.
 type DefaultingAnnotationRemover struct{}
 
-// Patch patches the child resources with information in ParentResource.
-func (lo DefaultingAnnotationRemover) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
+// Patch patches the child resources with information in resource.ParentResource.
+func (lo DefaultingAnnotationRemover) Patch(cr resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
 	if cr.GetAnnotations()[RemoveDefaultAnnotationsKey] != RemoveDefaultAnnotationsTrueValue {
 		return list, nil
 	}
@@ -103,8 +106,8 @@ func NewNamespacePatcher() NamespacePatcher {
 // goes through with no error, namespace being skipped.
 type NamespacePatcher struct{}
 
-// Patch patches the child resources with information in ParentResource.
-func (lo NamespacePatcher) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
+// Patch patches the child resources with information in resource.ParentResource.
+func (lo NamespacePatcher) Patch(cr resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
 	if cr.GetNamespace() == "" {
 		return list, nil
 	}
@@ -125,8 +128,8 @@ func NewLabelPropagator() LabelPropagator {
 // to all child resources.
 type LabelPropagator struct{}
 
-// Patch patches the child resources with information in ParentResource.
-func (lo LabelPropagator) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
+// Patch patches the child resources with information in resource.ParentResource.
+func (lo LabelPropagator) Patch(cr resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
 	for _, o := range list {
 		meta.AddLabels(o, cr.GetLabels())
 	}
@@ -142,8 +145,8 @@ func NewParentLabelSetAdder() ParentLabelSetAdder {
 // See https://github.com/crossplane/crossplane/blob/master/design/one-pager-stack-relationship-labels.md
 type ParentLabelSetAdder struct{}
 
-// Patch patches the child resources with information in ParentResource.
-func (lo ParentLabelSetAdder) Patch(cr ParentResource, list []ChildResource) ([]ChildResource, error) {
+// Patch patches the child resources with information in resource.ParentResource.
+func (lo ParentLabelSetAdder) Patch(cr resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
 	for _, o := range list {
 		meta.AddLabels(o, stacks.ParentLabels(cr))
 	}

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package templating
 
 import (
 	"fmt"
@@ -58,83 +58,83 @@ const (
 	errGetChildResource      = "could not get child resource"
 )
 
-// TemplatingReconcilerOption is used to provide necessary changes to templating
+// ReconcilerOption is used to provide necessary changes to templating
 // reconciler configuration.
-type TemplatingReconcilerOption func(*TemplatingReconciler)
+type ReconcilerOption func(*Reconciler)
 
-// WithChildResourcePatcher returns a TemplatingReconcilerOption that changes the
+// WithChildResourcePatcher returns a ReconcilerOption that changes the
 // ChildResourcePatchers.
-func WithChildResourcePatcher(op ...resource.ChildResourcePatcher) TemplatingReconcilerOption {
-	return func(reconciler *TemplatingReconciler) {
+func WithChildResourcePatcher(op ...ChildResourcePatcher) ReconcilerOption {
+	return func(reconciler *Reconciler) {
 		reconciler.children.ChildResourcePatcherChain = op
 	}
 }
 
-// WithTemplatingEngine returns a TemplatingReconcilerOption that changes the
+// WithEngine returns a ReconcilerOption that changes the
 // templating engine.
-func WithTemplatingEngine(eng resource.TemplatingEngine) TemplatingReconcilerOption {
-	return func(reconciler *TemplatingReconciler) {
+func WithEngine(eng Engine) ReconcilerOption {
+	return func(reconciler *Reconciler) {
 		reconciler.templating = eng
 	}
 }
 
-// WithShortWait returns a TemplatingReconcilerOption that changes the wait
+// WithShortWait returns a ReconcilerOption that changes the wait
 // duration that determines after how much time another reconcile should be triggered
 // after an error pass.
-func WithShortWait(d time.Duration) TemplatingReconcilerOption {
-	return func(reconciler *TemplatingReconciler) {
+func WithShortWait(d time.Duration) ReconcilerOption {
+	return func(reconciler *Reconciler) {
 		reconciler.shortWait = d
 	}
 }
 
-// WithLongWait returns a TemplatingReconcilerOption that changes the wait
+// WithLongWait returns a ReconcilerOption that changes the wait
 // duration that determines after how much time another reconcile should be triggered
 // after a successful pass.
-func WithLongWait(d time.Duration) TemplatingReconcilerOption {
-	return func(reconciler *TemplatingReconciler) {
+func WithLongWait(d time.Duration) ReconcilerOption {
+	return func(reconciler *Reconciler) {
 		reconciler.longWait = d
 	}
 }
 
-// WithLogger returns a TemplatingReconcilerOption that changes the logger.
-func WithLogger(l logging.Logger) TemplatingReconcilerOption {
-	return func(reconciler *TemplatingReconciler) {
+// WithLogger returns a ReconcilerOption that changes the logger.
+func WithLogger(l logging.Logger) ReconcilerOption {
+	return func(reconciler *Reconciler) {
 		reconciler.log = l
 	}
 }
 
 func defaultCRChildren() crChildren {
 	return crChildren{
-		ChildResourcePatcherChain: resource.ChildResourcePatcherChain{
-			resource.NewOwnerReferenceAdder(),
-			resource.NewDefaultingAnnotationRemover(),
-			resource.NewNamespacePatcher(),
-			resource.NewLabelPropagator(),
-			resource.NewParentLabelSetAdder(),
+		ChildResourcePatcherChain: ChildResourcePatcherChain{
+			NewOwnerReferenceAdder(),
+			NewDefaultingAnnotationRemover(),
+			NewNamespacePatcher(),
+			NewLabelPropagator(),
+			NewParentLabelSetAdder(),
 		},
 	}
 }
 
 type crChildren struct {
-	resource.ChildResourcePatcherChain
+	ChildResourcePatcherChain
 }
 
-// NewTemplatingReconciler returns a new templating reconciler that will reconcile
+// NewReconciler returns a new templating reconciler that will reconcile
 // given GroupVersionKind.
-func NewTemplatingReconciler(m manager.Manager, of schema.GroupVersionKind, options ...TemplatingReconcilerOption) *TemplatingReconciler {
+func NewReconciler(m manager.Manager, of schema.GroupVersionKind, options ...ReconcilerOption) *Reconciler {
 	nr := func() resource.ParentResource {
 		u := &unstructured.Unstructured{}
 		u.SetGroupVersionKind(of)
 		return u
 	}
 
-	r := &TemplatingReconciler{
+	r := &Reconciler{
 		kube:              m.GetClient(),
 		newParentResource: nr,
 		shortWait:         defaultShortWait,
 		longWait:          defaultLongWait,
 		log:               logging.NewNopLogger(),
-		templating:        &resource.NopTemplatingEngine{},
+		templating:        &NopEngine{},
 		finalizer:         runtimeresource.NewAPIFinalizer(m.GetClient(), finalizer),
 		children:          defaultCRChildren(),
 	}
@@ -145,22 +145,22 @@ func NewTemplatingReconciler(m manager.Manager, of schema.GroupVersionKind, opti
 	return r
 }
 
-// TemplatingReconciler is used to reconcile an arbitrary CRD whose GroupVersionKind
+// Reconciler is used to reconcile an arbitrary CRD whose GroupVersionKind
 // is supplied.
-type TemplatingReconciler struct {
+type Reconciler struct {
 	kube              client.Client
 	newParentResource func() resource.ParentResource
 	shortWait         time.Duration
 	longWait          time.Duration
 	log               logging.Logger
 
-	templating resource.TemplatingEngine
+	templating Engine
 	finalizer  runtimeresource.Finalizer
 	children   crChildren
 }
 
 // Reconcile is called by controller-runtime for reconciliation.
-func (r *TemplatingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), reconcileTimeout)
 	defer cancel()
 	log := r.log.WithValues("parent-resource", req)
