@@ -35,6 +35,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
+	runtimeresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 
 	"github.com/crossplane/templating-controller/pkg/resource"
 )
@@ -44,11 +45,14 @@ const (
 
 	defaultShortWait = 30 * time.Second
 	defaultLongWait  = 1 * time.Minute
+	finalizer        = "templating-controller.crossplane.io"
 
 	errUpdateResourceStatus  = "could not update status of the parent resource"
 	errGetResource           = "could not get the parent resource"
 	errTemplatingOperation   = "templating operation failed"
 	errChildResourcePatchers = "child resource patchers failed"
+	errAddFinalizer          = "cannot add finalizer to parent resource"
+	errRemoveFinalizer       = "cannot remove finalizer from parent resource"
 	errApply                 = "apply failed"
 	errCreateChildResource   = "could not create child resource"
 	errGetChildResource      = "could not get child resource"
@@ -62,7 +66,7 @@ type TemplatingReconcilerOption func(*TemplatingReconciler)
 // ChildResourcePatchers.
 func WithChildResourcePatcher(op ...resource.ChildResourcePatcher) TemplatingReconcilerOption {
 	return func(reconciler *TemplatingReconciler) {
-		reconciler.childResourcePatcher = op
+		reconciler.children.ChildResourcePatcherChain = op
 	}
 }
 
@@ -70,7 +74,7 @@ func WithChildResourcePatcher(op ...resource.ChildResourcePatcher) TemplatingRec
 // templating engine.
 func WithTemplatingEngine(eng resource.TemplatingEngine) TemplatingReconcilerOption {
 	return func(reconciler *TemplatingReconciler) {
-		reconciler.templatingEngine = eng
+		reconciler.templating = eng
 	}
 }
 
@@ -99,6 +103,22 @@ func WithLogger(l logging.Logger) TemplatingReconcilerOption {
 	}
 }
 
+func defaultCRChildren() crChildren {
+	return crChildren{
+		ChildResourcePatcherChain: resource.ChildResourcePatcherChain{
+			resource.NewOwnerReferenceAdder(),
+			resource.NewDefaultingAnnotationRemover(),
+			resource.NewNamespacePatcher(),
+			resource.NewLabelPropagator(),
+			resource.NewParentLabelSetAdder(),
+		},
+	}
+}
+
+type crChildren struct {
+	resource.ChildResourcePatcherChain
+}
+
 // NewTemplatingReconciler returns a new templating reconciler that will reconcile
 // given GroupVersionKind.
 func NewTemplatingReconciler(m manager.Manager, of schema.GroupVersionKind, options ...TemplatingReconcilerOption) *TemplatingReconciler {
@@ -114,14 +134,9 @@ func NewTemplatingReconciler(m manager.Manager, of schema.GroupVersionKind, opti
 		shortWait:         defaultShortWait,
 		longWait:          defaultLongWait,
 		log:               logging.NewNopLogger(),
-		templatingEngine:  &resource.NopTemplatingEngine{},
-		childResourcePatcher: resource.ChildResourcePatcherChain{
-			resource.NewOwnerReferenceAdder(),
-			resource.NewDefaultingAnnotationRemover(),
-			resource.NewNamespacePatcher(),
-			resource.NewLabelPropagator(),
-			resource.NewParentLabelSetAdder(),
-		},
+		templating:        &resource.NopTemplatingEngine{},
+		finalizer:         runtimeresource.NewAPIFinalizer(m.GetClient(), finalizer),
+		children:          defaultCRChildren(),
 	}
 
 	for _, opt := range options {
@@ -139,8 +154,9 @@ type TemplatingReconciler struct {
 	longWait          time.Duration
 	log               logging.Logger
 
-	templatingEngine     resource.TemplatingEngine
-	childResourcePatcher resource.ChildResourcePatcherChain
+	templating resource.TemplatingEngine
+	finalizer  runtimeresource.Finalizer
+	children   crChildren
 }
 
 // Reconcile is called by controller-runtime for reconciliation.
@@ -154,27 +170,37 @@ func (r *TemplatingReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 		// There's no need to requeue if the resource no longer exists. Otherwise
 		// we'll be requeued implicitly because we return an error.
 		log.Info("Cannot get the requested resource", "error", err)
-		return reconcile.Result{Requeue: false}, errors.Wrap(err, errGetResource)
+		return reconcile.Result{Requeue: false}, errors.Wrap(client.IgnoreNotFound(err), errGetResource)
 	}
 
 	if meta.WasDeleted(cr) {
 		// We have nothing to do as the child resources will be garbage collected
 		// by Kubernetes.
-		log.Debug("Skipping reconciliation since the resource is requested to be deleted")
+		if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
+			log.Info(errRemoveFinalizer, "error", err)
+			omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errRemoveFinalizer))))
+			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
+		}
 		return reconcile.Result{Requeue: false}, nil
 	}
 
-	childResources, err := r.templatingEngine.Run(cr)
+	childResources, err := r.templating.Run(cr)
 	if err != nil {
 		log.Info("Cannot run templating operation", "error", err)
 		omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errTemplatingOperation))))
 		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 
-	childResources, err = r.childResourcePatcher.Patch(cr, childResources)
+	childResources, err = r.children.Patch(cr, childResources)
 	if err != nil {
 		log.Info("Cannot run patchers on the child resources", "error", err)
 		omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errChildResourcePatchers))))
+		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
+	}
+
+	if err := r.finalizer.AddFinalizer(ctx, cr); err != nil {
+		log.Info(errAddFinalizer, "error", err)
+		omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errAddFinalizer))))
 		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 

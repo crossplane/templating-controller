@@ -147,7 +147,8 @@ func TestReconcile(t *testing.T) {
 		"ApplyFailed": {
 			args: args{
 				kube: &test.MockClient{
-					MockGet: test.NewMockGetFn(nil),
+					MockGet:    test.NewMockGetFn(nil),
+					MockUpdate: test.NewMockUpdateFn(nil),
 					MockPatch: test.NewMockPatchFn(nil, func(_ runtime.Object) error {
 						return errBoom
 					}),
@@ -182,7 +183,8 @@ func TestReconcile(t *testing.T) {
 		"Success": {
 			args: args{
 				kube: &test.MockClient{
-					MockGet: test.NewMockGetFn(nil),
+					MockGet:    test.NewMockGetFn(nil),
+					MockUpdate: test.NewMockUpdateFn(nil),
 					MockPatch: test.NewMockPatchFn(nil, func(_ runtime.Object) error {
 						return errBoom
 					}),
