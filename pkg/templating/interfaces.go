@@ -16,7 +16,11 @@ limitations under the License.
 
 package templating
 
-import "github.com/crossplane/templating-controller/pkg/resource"
+import (
+	"context"
+
+	"github.com/crossplane/templating-controller/pkg/resource"
+)
 
 // Engine is used as main generation engine by the templating reconciler.
 // Its input is typically a Custom Resource instance and output is various
@@ -43,16 +47,16 @@ type ChildResourcePatcher interface {
 // ChildResourcePatcher
 type ChildResourcePatcherFunc func(resource.ParentResource, []resource.ChildResource) ([]resource.ChildResource, error)
 
-// Patch calls the resource.ChildResourcePatcherFunc function.
+// Patch calls the ChildResourcePatcherFunc function.
 func (pre ChildResourcePatcherFunc) Patch(cr resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
 	return pre(cr, list)
 }
 
-// ChildResourcePatcherChain makes it easier to provide a list of resource.ChildResourcePatcher
+// ChildResourcePatcherChain makes it easier to provide a list of ChildResourcePatcher
 // to be called in order.
 type ChildResourcePatcherChain []ChildResourcePatcher
 
-// Patch calls the resource.ChildResourcePatcherChain functions in order.
+// Patch calls the ChildResourcePatcherChain functions in order.
 func (pre ChildResourcePatcherChain) Patch(cr resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
 	currentList := list
 	var err error
@@ -63,4 +67,18 @@ func (pre ChildResourcePatcherChain) Patch(cr resource.ParentResource, list []re
 		}
 	}
 	return currentList, nil
+}
+
+// ChildResourceDeleter deletes the child resources.
+type ChildResourceDeleter interface {
+	Delete(ctx context.Context, list []resource.ChildResource) ([]resource.ChildResource, error)
+}
+
+// ChildResourceDeleterFunc makes it easier to provide only a function as
+// ChildResourceDeleter
+type ChildResourceDeleterFunc func(ctx context.Context, list []resource.ChildResource) ([]resource.ChildResource, error)
+
+// Delete calls the ChildResourceDeleterFunc function.
+func (pre ChildResourceDeleterFunc) Delete(ctx context.Context, list []resource.ChildResource) ([]resource.ChildResource, error) {
+	return pre(ctx, list)
 }

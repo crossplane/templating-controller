@@ -43,6 +43,10 @@ import (
 const (
 	reconcileTimeout = 1 * time.Minute
 
+	// TODO(muvaf): Once we get customizable exponential backoff, we should not
+	// need this tinyWait.
+	tinyWait = 1 * time.Second
+
 	defaultShortWait = 30 * time.Second
 	defaultLongWait  = 1 * time.Minute
 	finalizer        = "templating-controller.crossplane.io"
@@ -51,11 +55,14 @@ const (
 	errGetResource           = "could not get the parent resource"
 	errTemplatingOperation   = "templating operation failed"
 	errChildResourcePatchers = "child resource patchers failed"
+	errDeleter               = "cannot run deleter"
 	errAddFinalizer          = "cannot add finalizer to parent resource"
 	errRemoveFinalizer       = "cannot remove finalizer from parent resource"
 	errApply                 = "apply failed"
 	errCreateChildResource   = "could not create child resource"
 	errGetChildResource      = "could not get child resource"
+
+	msgWaitingForDeletion = "waiting for deletion of child resources"
 )
 
 // ReconcilerOption is used to provide necessary changes to templating
@@ -103,7 +110,7 @@ func WithLogger(l logging.Logger) ReconcilerOption {
 	}
 }
 
-func defaultCRChildren() crChildren {
+func defaultCRChildren(c client.Client) crChildren {
 	return crChildren{
 		ChildResourcePatcherChain: ChildResourcePatcherChain{
 			NewOwnerReferenceAdder(),
@@ -112,11 +119,13 @@ func defaultCRChildren() crChildren {
 			NewLabelPropagator(),
 			NewParentLabelSetAdder(),
 		},
+		ChildResourceDeleter: NewAPIOrderedDeleter(c),
 	}
 }
 
 type crChildren struct {
 	ChildResourcePatcherChain
+	ChildResourceDeleter
 }
 
 // NewReconciler returns a new templating reconciler that will reconcile
@@ -136,7 +145,7 @@ func NewReconciler(m manager.Manager, of schema.GroupVersionKind, options ...Rec
 		log:               logging.NewNopLogger(),
 		templating:        &NopEngine{},
 		finalizer:         runtimeresource.NewAPIFinalizer(m.GetClient(), finalizer),
-		children:          defaultCRChildren(),
+		children:          defaultCRChildren(m.GetClient()),
 	}
 
 	for _, opt := range options {
@@ -160,7 +169,10 @@ type Reconciler struct {
 }
 
 // Reconcile is called by controller-runtime for reconciliation.
-func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) { // nolint:gocyclo
+	// NOTE(muvaf): This method is well over our cyclomatic complexity goal.
+	// Be wary of adding additional complexity.
+
 	ctx, cancel := context.WithTimeout(context.Background(), reconcileTimeout)
 	defer cancel()
 	log := r.log.WithValues("parent-resource", req)
@@ -171,17 +183,6 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		// we'll be requeued implicitly because we return an error.
 		log.Info("Cannot get the requested resource", "error", err)
 		return reconcile.Result{Requeue: false}, errors.Wrap(client.IgnoreNotFound(err), errGetResource)
-	}
-
-	if meta.WasDeleted(cr) {
-		// We have nothing to do as the child resources will be garbage collected
-		// by Kubernetes.
-		if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
-			log.Info(errRemoveFinalizer, "error", err)
-			omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errRemoveFinalizer))))
-			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
-		}
-		return reconcile.Result{Requeue: false}, nil
 	}
 
 	childResources, err := r.templating.Run(cr)
@@ -196,6 +197,27 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		log.Info("Cannot run patchers on the child resources", "error", err)
 		omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errChildResourcePatchers))))
 		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
+	}
+
+	if meta.WasDeleted(cr) {
+		deleting, err := r.children.Delete(ctx, childResources)
+		if err != nil {
+			log.Info(errDeleter, "error", err)
+			omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errDeleter))))
+			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
+		}
+
+		if len(deleting) > 0 {
+			omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileSuccess().WithMessage(msgWaitingForDeletion)))
+			return ctrl.Result{RequeueAfter: tinyWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
+		}
+
+		if err := r.finalizer.RemoveFinalizer(ctx, cr); client.IgnoreNotFound(err) != nil {
+			log.Info(errRemoveFinalizer, "error", err)
+			omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errRemoveFinalizer))))
+			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
+		}
+		return reconcile.Result{Requeue: false}, nil
 	}
 
 	if err := r.finalizer.AddFinalizer(ctx, cr); err != nil {

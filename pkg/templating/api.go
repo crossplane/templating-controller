@@ -17,24 +17,38 @@ limitations under the License.
 package templating
 
 import (
+	"context"
+	"strconv"
 	"strings"
 
-	"github.com/crossplane/templating-controller/pkg/resource"
-
+	"github.com/pkg/errors"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
-
 	"github.com/crossplane/crossplane/pkg/stacks"
+
+	"github.com/crossplane/templating-controller/pkg/resource"
 )
 
-// Constants used for determining whether the defaulting annotations should be
-// removed or not.
+// Error strings.
 const (
-	RemoveDefaultAnnotationsKey       = "templatestacks.crossplane.io/remove-defaulting-annotations"
-	RemoveDefaultAnnotationsTrueValue = "true"
+	errDeleteChildResource = "cannot delete child resource"
+	errPriorityToInt       = "cannot convert deletion priority into integer"
 )
+
+// Constants used for annotations.
+const (
+	RemoveDefaultAnnotationsKey         = "templatestacks.crossplane.io/remove-defaulting-annotations"
+	RemoveDefaultAnnotationsTrueValue   = "true"
+	DeletionPriorityAnnotationKey       = "templatestacks.crossplane.io/deletion-priority"
+	DeletionPriorityAnnotationZeroValue = "0"
+)
+
+const minInt = -(int(^uint(0) >> 1)) - 1
 
 // NopEngine is a no-op templating engine.
 type NopEngine struct{}
@@ -151,6 +165,72 @@ func (lo ParentLabelSetAdder) Patch(cr resource.ParentResource, list []resource.
 		meta.AddLabels(o, stacks.ParentLabels(cr))
 	}
 	return list, nil
+}
+
+// NewAPIOrderedDeleter returns a new *APIOrderedDeleter.
+func NewAPIOrderedDeleter(c client.Client) *APIOrderedDeleter {
+	return &APIOrderedDeleter{kube: c}
+}
+
+// APIOrderedDeleter deletes the child resources in an order that is determined
+// by their priority noted in the child resource annotation. The child resources
+// with higher priority will be deleted first and their deletion will block
+// the lower priority ones.
+type APIOrderedDeleter struct {
+	kube client.Client
+}
+
+// Delete executes an ordered deletion of child resources depending on their
+// deletion priority.
+func (d *APIOrderedDeleter) Delete(ctx context.Context, list []resource.ChildResource) ([]resource.ChildResource, error) {
+	hp := minInt
+	del := []resource.ChildResource{}
+	for _, res := range list {
+		val, ok := res.GetAnnotations()[DeletionPriorityAnnotationKey]
+		// The zero-value sets a default but it doesn't necessarily mean that the
+		// resources with no annotation will be deleted last as user may want to
+		// mark some resources as last-to-be-deleted by giving them negative
+		// priority.
+		if !ok {
+			val = DeletionPriorityAnnotationZeroValue
+		}
+		p, err := strconv.Atoi(val)
+		if err != nil {
+			return nil, errors.Wrap(err, errPriorityToInt)
+		}
+		// We directly skip the case where we are sure that the resource
+		// has a lower priority than current highest priority regardless of
+		// whether it exists or not.
+		if p < hp {
+			continue
+		}
+		nn := types.NamespacedName{Name: res.GetName(), Namespace: res.GetNamespace()}
+		if err := d.kube.Get(ctx, nn, res); err != nil {
+			// The resources that do not exist anymore should not have any
+			// effect in our calculations.
+			if kerrors.IsNotFound(err) {
+				continue
+			}
+			return nil, errors.Wrap(err, errGetChildResource)
+		}
+		// If the priority of the resource is higher than our current highest
+		// priority level, then we should discard everything in the deletion queue
+		// and set the new highest priority.
+		if p > hp {
+			hp = p
+			del = []resource.ChildResource{res}
+			continue
+		}
+		// If the resource is on the highest priority level, then it should be
+		// deleted in this iteration.
+		del = append(del, res)
+	}
+	for _, res := range del {
+		if err := d.kube.Delete(ctx, res); client.IgnoreNotFound(err) != nil {
+			return nil, errors.Wrap(err, errDeleteChildResource)
+		}
+	}
+	return del, nil
 }
 
 // todo: temp solution to detect provider kind.
