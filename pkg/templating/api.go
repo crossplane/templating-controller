@@ -18,6 +18,7 @@ package templating
 
 import (
 	"context"
+	"math"
 	"strconv"
 	"strings"
 
@@ -47,8 +48,6 @@ const (
 	DeletionPriorityAnnotationKey       = "templatestacks.crossplane.io/deletion-priority"
 	DeletionPriorityAnnotationZeroValue = "0"
 )
-
-const minInt = -(int(^uint(0) >> 1)) - 1
 
 // NopEngine is a no-op templating engine.
 type NopEngine struct{}
@@ -183,7 +182,7 @@ type APIOrderedDeleter struct {
 // Delete executes an ordered deletion of child resources depending on their
 // deletion priority.
 func (d *APIOrderedDeleter) Delete(ctx context.Context, list []resource.ChildResource) ([]resource.ChildResource, error) {
-	hp := minInt
+	hp := int64(math.MinInt64)
 	del := []resource.ChildResource{}
 	for _, res := range list {
 		val, ok := res.GetAnnotations()[DeletionPriorityAnnotationKey]
@@ -194,7 +193,7 @@ func (d *APIOrderedDeleter) Delete(ctx context.Context, list []resource.ChildRes
 		if !ok {
 			val = DeletionPriorityAnnotationZeroValue
 		}
-		p, err := strconv.Atoi(val)
+		p, err := strconv.ParseInt(val, 10, 64)
 		if err != nil {
 			return nil, errors.Wrap(err, errPriorityToInt)
 		}
