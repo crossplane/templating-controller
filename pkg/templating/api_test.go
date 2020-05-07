@@ -17,17 +17,22 @@ limitations under the License.
 package templating
 
 import (
+	"context"
 	"testing"
 
-	"github.com/crossplane/templating-controller/pkg/resource"
-
 	"github.com/google/go-cmp/cmp"
+	"github.com/pkg/errors"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 	"github.com/crossplane/crossplane/pkg/stacks"
 
+	"github.com/crossplane/templating-controller/pkg/resource"
 	"github.com/crossplane/templating-controller/pkg/resource/fake"
 )
 
@@ -42,6 +47,8 @@ var (
 	_ ChildResourcePatcher = NamespacePatcher{}
 	_ ChildResourcePatcher = LabelPropagator{}
 	_ ChildResourcePatcher = ParentLabelSetAdder{}
+
+	_ ChildResourceDeleter = &APIOrderedDeleter{}
 )
 
 type args struct {
@@ -95,10 +102,10 @@ func TestDefaultingAnnotationRemover(t *testing.T) {
 			p := NewDefaultingAnnotationRemover()
 			got, err := p.Patch(tc.args.cr, tc.args.list)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
-				t.Errorf("Reconcile(...): -want, +got:\n%s", diff)
+				t.Errorf("Patch(...): -want, +got:\n%s", diff)
 			}
 			if diff := cmp.Diff(tc.want.result, got); diff != "" {
-				t.Errorf("Reconcile(...): -want, +got:\n%s", diff)
+				t.Errorf("Patch(...): -want, +got:\n%s", diff)
 			}
 		})
 	}
@@ -145,10 +152,10 @@ func TestOwnerReferenceAdder(t *testing.T) {
 			p := NewOwnerReferenceAdder()
 			got, err := p.Patch(tc.args.cr, tc.args.list)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
-				t.Errorf("Reconcile(...): -want, +got:\n%s", diff)
+				t.Errorf("Patch(...): -want, +got:\n%s", diff)
 			}
 			if diff := cmp.Diff(tc.want.result, got); diff != "" {
-				t.Errorf("Reconcile(...): -want, +got:\n%s", diff)
+				t.Errorf("Patch(...): -want, +got:\n%s", diff)
 			}
 		})
 	}
@@ -195,10 +202,10 @@ func TestNamespacePatcher(t *testing.T) {
 			p := NewNamespacePatcher()
 			got, err := p.Patch(tc.args.cr, tc.args.list)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
-				t.Errorf("Reconcile(...): -want, +got:\n%s", diff)
+				t.Errorf("Patch(...): -want, +got:\n%s", diff)
 			}
 			if diff := cmp.Diff(tc.want.result, got); diff != "" {
-				t.Errorf("Reconcile(...): -want, +got:\n%s", diff)
+				t.Errorf("Patch(...): -want, +got:\n%s", diff)
 			}
 		})
 	}
@@ -234,16 +241,16 @@ func TestLabelPropagator(t *testing.T) {
 			p := NewLabelPropagator()
 			got, err := p.Patch(tc.args.cr, tc.args.list)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
-				t.Errorf("Reconcile(...): -want, +got:\n%s", diff)
+				t.Errorf("Patch(...): -want, +got:\n%s", diff)
 			}
 			if diff := cmp.Diff(tc.want.result, got); diff != "" {
-				t.Errorf("Reconcile(...): -want, +got:\n%s", diff)
+				t.Errorf("Patch(...): -want, +got:\n%s", diff)
 			}
 		})
 	}
 }
 
-func TestParentLabelSetAdded(t *testing.T) {
+func TestParentLabelSetAdder(t *testing.T) {
 	parent := fake.NewMockResource(fake.WithGVK(fake.MockParentGVK), fake.WithNamespaceName(name, namespace))
 	cases := map[string]struct {
 		args
@@ -270,11 +277,200 @@ func TestParentLabelSetAdded(t *testing.T) {
 			p := NewParentLabelSetAdder()
 			got, err := p.Patch(tc.args.cr, tc.args.list)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
-				t.Errorf("Reconcile(...): -want, +got:\n%s", diff)
+				t.Errorf("Patch(...): -want, +got:\n%s", diff)
 			}
 			if diff := cmp.Diff(tc.want.result, got); diff != "" {
-				t.Errorf("Reconcile(...): -want, +got:\n%s", diff)
+				t.Errorf("Patch(...): -want, +got:\n%s", diff)
 			}
 		})
 	}
+}
+
+func TestAPIOrderedDeleter_Delete(t *testing.T) {
+	type args struct {
+		kube client.Client
+		list []resource.ChildResource
+	}
+	type want struct {
+		deleting []resource.ChildResource
+		err      error
+	}
+
+	cases := map[string]struct {
+		reason string
+		args
+		want
+	}{
+		"ChooseHighestPriorityFirst": {
+			reason: "Deletion should start with the resources with highest priority",
+			args: args{
+				kube: &test.MockClient{
+					MockGet: test.NewMockGetFn(nil),
+					MockDelete: func(_ context.Context, obj runtime.Object, _ ...client.DeleteOption) error {
+						if mobj, ok := obj.(metav1.Object); ok {
+							if mobj.GetAnnotations()[DeletionPriorityAnnotationKey] != "99" {
+								t.Errorf("unexpected delete call is made")
+							}
+						}
+						return nil
+					},
+				},
+				list: []resource.ChildResource{
+					fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{DeletionPriorityAnnotationKey: "99"})),
+					fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{DeletionPriorityAnnotationKey: "49"})),
+					fake.NewMockResource(),
+				},
+			},
+			want: want{
+				deleting: []resource.ChildResource{
+					fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{DeletionPriorityAnnotationKey: "99"})),
+				},
+			},
+		},
+		"ShouldDeleteSecondHighest": {
+			reason: "Deletion should be called for the resources with second highest priority when the highest one is already deleted",
+			args: args{
+				kube: &test.MockClient{
+					MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
+						mobj, _ := obj.(metav1.Object)
+						if mobj.GetAnnotations()[DeletionPriorityAnnotationKey] == "99" {
+							return kerrors.NewNotFound(schema.GroupResource{}, "")
+						}
+						return nil
+					},
+					MockDelete: func(_ context.Context, obj runtime.Object, _ ...client.DeleteOption) error {
+						mobj, _ := obj.(metav1.Object)
+						if mobj.GetAnnotations()[DeletionPriorityAnnotationKey] != "49" {
+							t.Errorf("unexpected delete call is made")
+						}
+						return nil
+					},
+				},
+				list: []resource.ChildResource{
+					fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{DeletionPriorityAnnotationKey: "99"})),
+					fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{DeletionPriorityAnnotationKey: "49"})),
+					fake.NewMockResource(),
+				},
+			},
+			want: want{
+				deleting: []resource.ChildResource{
+					fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{DeletionPriorityAnnotationKey: "49"})),
+				},
+			},
+		},
+		"NegativePriority": {
+			reason: "If a resource has a negative priority and the rest does not have any priority, it should be deleted last",
+			args: args{
+				kube: &test.MockClient{
+					MockGet: test.NewMockGetFn(nil),
+					MockDelete: func(_ context.Context, obj runtime.Object, _ ...client.DeleteOption) error {
+						mobj, _ := obj.(metav1.Object)
+						if mobj.GetAnnotations()[DeletionPriorityAnnotationKey] != "" {
+							t.Errorf("unexpected delete call is made")
+						}
+						return nil
+					},
+				},
+				list: []resource.ChildResource{
+					fake.NewMockResource(),
+					fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{DeletionPriorityAnnotationKey: "-1"})),
+					fake.NewMockResource(),
+				},
+			},
+			want: want{
+				deleting: []resource.ChildResource{
+					fake.NewMockResource(),
+					fake.NewMockResource(),
+				},
+			},
+		},
+		"AnnotationIsNotInt": {
+			reason: "It should return error if the priority annotation is not integer",
+			args: args{
+				list: []resource.ChildResource{
+					fake.NewMockResource(fake.WithAdditionalAnnotations(map[string]string{DeletionPriorityAnnotationKey: "ola"})),
+				},
+			},
+			want: want{
+				err: errors.Wrap(errors.New("strconv.ParseInt: parsing \"ola\": invalid syntax"), errPriorityToInt),
+			},
+		},
+		"GetFailed": {
+			reason: "It should return error if get operation has failed",
+			args: args{
+				kube: &test.MockClient{
+					MockGet: test.NewMockGetFn(errBoom),
+				},
+				list: []resource.ChildResource{
+					fake.NewMockResource(),
+				},
+			},
+			want: want{
+				err: errors.Wrap(errBoom, errGetChildResource),
+			},
+		},
+		"DeletionFailed": {
+			reason: "It should return error if deletion has failed",
+			args: args{
+				kube: &test.MockClient{
+					MockGet:    test.NewMockGetFn(nil),
+					MockDelete: test.NewMockDeleteFn(errBoom),
+				},
+				list: []resource.ChildResource{
+					fake.NewMockResource(),
+				},
+			},
+			want: want{
+				err: errors.Wrap(errBoom, errDeleteChildResource),
+			},
+		},
+		"ShouldDeleteAll": {
+			reason: "Deletion should be called for all the resources if their priority order is the same",
+			args: args{
+				kube: &test.MockClient{
+					MockGet:    test.NewMockGetFn(nil),
+					MockDelete: test.NewMockDeleteFn(nil),
+				},
+				list: []resource.ChildResource{
+					fake.NewMockResource(),
+					fake.NewMockResource(),
+				},
+			},
+			want: want{
+				deleting: []resource.ChildResource{
+					fake.NewMockResource(),
+					fake.NewMockResource(),
+				},
+			},
+		},
+		"ReturnEmptyListIfAllDeleted": {
+			reason: "When all the resources are already deleted, it should return an empty list",
+			args: args{
+				kube: &test.MockClient{
+					MockGet: test.NewMockGetFn(kerrors.NewNotFound(schema.GroupResource{}, "")),
+				},
+				list: []resource.ChildResource{
+					fake.NewMockResource(),
+					fake.NewMockResource(),
+				},
+			},
+			want: want{
+				deleting: []resource.ChildResource{},
+			},
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			d := NewAPIOrderedDeleter(tc.args.kube)
+			deleting, err := d.Delete(context.Background(), tc.args.list)
+			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
+				t.Errorf("Delete(...): -want, +got:\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.want.deleting, deleting); diff != "" {
+				t.Errorf("Delete(...): -want, +got:\n%s", diff)
+			}
+		})
+	}
+
 }
