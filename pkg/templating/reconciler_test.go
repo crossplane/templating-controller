@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	runtimeresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 	runtimefake "github.com/crossplane/crossplane-runtime/pkg/resource/fake"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 
@@ -44,7 +45,6 @@ const (
 )
 
 var (
-	timeNow = metav1.Now()
 	errBoom = fmt.Errorf("boom")
 )
 
@@ -76,18 +76,6 @@ func TestReconcile(t *testing.T) {
 			want: want{
 				err: errors.Wrap(errBoom, errGetResource),
 			},
-		},
-		"Deleted": {
-			args: args{
-				kube: &test.MockClient{
-					MockGet: test.NewMockGetFn(nil, func(obj runtime.Object) error {
-						cr := obj.(*fake.MockResource)
-						cr.SetDeletionTimestamp(&timeNow)
-						return nil
-					}),
-				},
-			},
-			want: want{},
 		},
 		"TemplatingFailed": {
 			args: args{
@@ -138,6 +126,175 @@ func TestReconcile(t *testing.T) {
 					WithChildResourcePatcher(ChildResourcePatcherFunc(func(_ resource.ParentResource, _ []resource.ChildResource) ([]resource.ChildResource, error) {
 						return nil, errBoom
 					})),
+				},
+			},
+			want: want{
+				result: reconcile.Result{RequeueAfter: defaultShortWait},
+			},
+		},
+		"DeleterFailed": {
+			args: args{
+				kube: &test.MockClient{
+					MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
+						mobj, _ := obj.(metav1.Object)
+						now := metav1.Now()
+						mobj.SetDeletionTimestamp(&now)
+						return nil
+					},
+					MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(obj runtime.Object) error {
+						got := obj.(*fake.MockResource)
+						gotCond, err := resource.GetCondition(got, v1alpha1.TypeSynced)
+						if err != nil {
+							t.Errorf("Reconcile(...): error getting condition\n%s", err.Error())
+						}
+						wantCond := v1alpha1.ReconcileError(errors.Wrap(errBoom, errDeleter))
+						if diff := cmp.Diff(wantCond, gotCond); diff != "" {
+							t.Errorf("Reconcile(...): -want, +got:\n%s", diff)
+						}
+						return nil
+					}),
+				},
+				opts: []ReconcilerOption{
+					WithEngine(&NopEngine{}),
+					WithChildResourcePatcher(ChildResourcePatcherFunc(func(_ resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
+						return list, nil
+					})),
+					WithChildResourceDeleter(ChildResourceDeleterFunc(func(_ context.Context, _ []resource.ChildResource) ([]resource.ChildResource, error) {
+						return nil, errBoom
+					})),
+				},
+			},
+			want: want{
+				result: reconcile.Result{RequeueAfter: defaultShortWait},
+			},
+		},
+		"StillDeleting": {
+			args: args{
+				kube: &test.MockClient{
+					MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
+						mobj, _ := obj.(metav1.Object)
+						now := metav1.Now()
+						mobj.SetDeletionTimestamp(&now)
+						return nil
+					},
+					MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(obj runtime.Object) error {
+						got := obj.(*fake.MockResource)
+						gotCond, err := resource.GetCondition(got, v1alpha1.TypeSynced)
+						if err != nil {
+							t.Errorf("Reconcile(...): error getting condition\n%s", err.Error())
+						}
+						wantCond := v1alpha1.ReconcileSuccess().WithMessage(msgWaitingForDeletion)
+						if diff := cmp.Diff(wantCond, gotCond); diff != "" {
+							t.Errorf("Reconcile(...): -want, +got:\n%s", diff)
+						}
+						return nil
+					}),
+				},
+				opts: []ReconcilerOption{
+					WithEngine(&NopEngine{}),
+					WithChildResourcePatcher(ChildResourcePatcherFunc(func(_ resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
+						return list, nil
+					})),
+					WithChildResourceDeleter(ChildResourceDeleterFunc(func(_ context.Context, _ []resource.ChildResource) ([]resource.ChildResource, error) {
+						return []resource.ChildResource{fake.NewMockResource()}, nil
+					})),
+				},
+			},
+			want: want{
+				result: reconcile.Result{RequeueAfter: tinyWait},
+			},
+		},
+		"DeletionCompletedFinalizerFailed": {
+			args: args{
+				kube: &test.MockClient{
+					MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
+						mobj, _ := obj.(metav1.Object)
+						now := metav1.Now()
+						mobj.SetDeletionTimestamp(&now)
+						return nil
+					},
+					MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(obj runtime.Object) error {
+						got := obj.(*fake.MockResource)
+						gotCond, err := resource.GetCondition(got, v1alpha1.TypeSynced)
+						if err != nil {
+							t.Errorf("Reconcile(...): error getting condition\n%s", err.Error())
+						}
+						wantCond := v1alpha1.ReconcileError(errors.Wrap(errBoom, errRemoveFinalizer))
+						if diff := cmp.Diff(wantCond, gotCond); diff != "" {
+							t.Errorf("Reconcile(...): -want, +got:\n%s", diff)
+						}
+						return nil
+					}),
+				},
+				opts: []ReconcilerOption{
+					WithEngine(&NopEngine{}),
+					WithChildResourcePatcher(ChildResourcePatcherFunc(func(_ resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
+						return list, nil
+					})),
+					WithChildResourceDeleter(ChildResourceDeleterFunc(func(_ context.Context, _ []resource.ChildResource) ([]resource.ChildResource, error) {
+						return nil, nil
+					})),
+					WithFinalizer(runtimeresource.FinalizerFns{RemoveFinalizerFn: func(_ context.Context, _ runtimeresource.Object) error {
+						return errBoom
+					}}),
+				},
+			},
+			want: want{
+				result: reconcile.Result{RequeueAfter: defaultShortWait},
+			},
+		},
+		"DeletionCompletedSuccess": {
+			args: args{
+				kube: &test.MockClient{
+					MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
+						mobj, _ := obj.(metav1.Object)
+						now := metav1.Now()
+						mobj.SetDeletionTimestamp(&now)
+						return nil
+					},
+				},
+				opts: []ReconcilerOption{
+					WithEngine(&NopEngine{}),
+					WithChildResourcePatcher(ChildResourcePatcherFunc(func(_ resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
+						return list, nil
+					})),
+					WithChildResourceDeleter(ChildResourceDeleterFunc(func(_ context.Context, _ []resource.ChildResource) ([]resource.ChildResource, error) {
+						return nil, nil
+					})),
+					WithFinalizer(runtimeresource.FinalizerFns{RemoveFinalizerFn: func(_ context.Context, _ runtimeresource.Object) error {
+						return nil
+					}}),
+				},
+			},
+			want: want{
+				result: reconcile.Result{Requeue: false},
+			},
+		},
+		"FinalizerAdditionFailed": {
+			args: args{
+				kube: &test.MockClient{
+					MockGet: test.NewMockGetFn(nil),
+					MockStatusUpdate: test.NewMockStatusUpdateFn(nil, func(obj runtime.Object) error {
+						got := obj.(*fake.MockResource)
+						gotCond, err := resource.GetCondition(got, v1alpha1.TypeSynced)
+						if err != nil {
+							t.Errorf("Reconcile(...): error getting condition\n%s", err.Error())
+						}
+						wantCond := v1alpha1.ReconcileError(errors.Wrap(errBoom, errAddFinalizer))
+						if diff := cmp.Diff(wantCond, gotCond); diff != "" {
+							t.Errorf("Reconcile(...): -want, +got:\n%s", diff)
+						}
+						return nil
+					}),
+				},
+				opts: []ReconcilerOption{
+					WithEngine(&NopEngine{}),
+					WithChildResourcePatcher(ChildResourcePatcherFunc(func(_ resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
+						return list, nil
+					})),
+					WithFinalizer(runtimeresource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ runtimeresource.Object) error {
+						return errBoom
+					}}),
 				},
 			},
 			want: want{
@@ -220,9 +377,7 @@ func TestReconcile(t *testing.T) {
 				Scheme: runtimefake.SchemeWith(&fake.MockResource{}),
 			}
 			tc.args.opts = append(tc.args.opts, withNewParentResourceFunc(func() resource.ParentResource {
-				cr := &fake.MockResource{}
-				cr.SetGroupVersionKind(schema.EmptyObjectKind.GroupVersionKind())
-				return cr
+				return fake.NewMockResource(fake.WithGVK(schema.EmptyObjectKind.GroupVersionKind()))
 			}))
 			r := NewReconciler(mgr, (&fake.MockResource{}).GroupVersionKind(), tc.args.opts...)
 			result, err := r.Reconcile(reconcile.Request{})

@@ -69,6 +69,22 @@ const (
 // reconciler configuration.
 type ReconcilerOption func(*Reconciler)
 
+// WithChildResourceDeleter returns a ReconcilerOption that changes the
+// ChildResourceDeleter.
+func WithChildResourceDeleter(d ChildResourceDeleter) ReconcilerOption {
+	return func(reconciler *Reconciler) {
+		reconciler.children.ChildResourceDeleter = d
+	}
+}
+
+// WithFinalizer returns a ReconcilerOption that changes the
+// Finalizer.
+func WithFinalizer(f runtimeresource.Finalizer) ReconcilerOption {
+	return func(reconciler *Reconciler) {
+		reconciler.finalizer = f
+	}
+}
+
 // WithChildResourcePatcher returns a ReconcilerOption that changes the
 // ChildResourcePatchers.
 func WithChildResourcePatcher(op ...ChildResourcePatcher) ReconcilerOption {
