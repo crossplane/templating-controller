@@ -18,15 +18,12 @@ package templating
 
 import (
 	"context"
-
 	"math"
 	"strconv"
-	"strings"
 
 	"github.com/pkg/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -77,16 +74,6 @@ func (lo OwnerReferenceAdder) Patch(cr resource.ParentResource, list []resource.
 	trueVal := true
 	ref.BlockOwnerDeletion = &trueVal
 	for _, o := range list {
-		// TODO(muvaf): Provider kind resources are special in the sense that
-		// their deletion should be blocked until all resources provisioned with
-		// them are deleted. Since we let Kubernetes garbage collector clean the
-		// resources, we skip deletion of Provider kind resources for deletions
-		// to success.
-		// Find a way to realize that dependency without bringing in too much
-		// complexity.
-		if isProvider(o) {
-			continue
-		}
 		meta.AddOwnerReference(o, ref)
 	}
 	return list, nil
@@ -239,10 +226,4 @@ func (d *APIOrderedDeleter) deleteIfControllable(ctx context.Context, obj, contr
 		return errors.New(errNotController)
 	}
 	return errors.Wrap(client.IgnoreNotFound(d.kube.Delete(ctx, obj)), errDeleteChildResource)
-}
-
-// todo: temp solution to detect provider kind.
-func isProvider(o runtime.Object) bool {
-	gvk := o.GetObjectKind().GroupVersionKind()
-	return strings.HasSuffix(gvk.Group, "crossplane.io") && strings.EqualFold(gvk.Kind, "provider")
 }

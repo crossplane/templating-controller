@@ -127,22 +127,12 @@ func TestOwnerReferenceAdder(t *testing.T) {
 				list: []resource.ChildResource{
 					fake.NewMockResource(),
 					fake.NewMockResource(),
-					fake.NewMockResource(fake.WithGVK(schema.GroupVersionKind{
-						Group:   "gcp.crossplane.io",
-						Version: "v1alpha1",
-						Kind:    "provider",
-					})),
 				},
 			},
 			want: want{
 				result: []resource.ChildResource{
 					fake.NewMockResource(fake.WithControllerRef(parent, parent.GroupVersionKind())),
 					fake.NewMockResource(fake.WithControllerRef(parent, parent.GroupVersionKind())),
-					fake.NewMockResource(fake.WithGVK(schema.GroupVersionKind{
-						Group:   "gcp.crossplane.io",
-						Version: "v1alpha1",
-						Kind:    "provider",
-					})),
 				},
 			},
 		},
