@@ -136,8 +136,8 @@ func TestOwnerReferenceAdder(t *testing.T) {
 			},
 			want: want{
 				result: []resource.ChildResource{
-					fake.NewMockResource(fake.WithOwnerReferenceTo(parent, parent.GroupVersionKind())),
-					fake.NewMockResource(fake.WithOwnerReferenceTo(parent, parent.GroupVersionKind())),
+					fake.NewMockResource(fake.WithControllerRef(parent, parent.GroupVersionKind())),
+					fake.NewMockResource(fake.WithControllerRef(parent, parent.GroupVersionKind())),
 					fake.NewMockResource(fake.WithGVK(schema.GroupVersionKind{
 						Group:   "gcp.crossplane.io",
 						Version: "v1alpha1",
@@ -289,6 +289,7 @@ func TestParentLabelSetAdder(t *testing.T) {
 func TestAPIOrderedDeleter_Delete(t *testing.T) {
 	type args struct {
 		kube client.Client
+		cr   resource.ParentResource
 		list []resource.ChildResource
 	}
 	type want struct {
@@ -409,6 +410,21 @@ func TestAPIOrderedDeleter_Delete(t *testing.T) {
 				err: errors.Wrap(errBoom, errGetChildResource),
 			},
 		},
+		"DeletionFailedIfNotOwner": {
+			reason: "It should return error if the owner of the deleted object is not given parent",
+			args: args{
+				kube: &test.MockClient{
+					MockGet: test.NewMockGetFn(nil),
+				},
+				cr: fake.NewMockResource(fake.WithUID("foo")),
+				list: []resource.ChildResource{
+					fake.NewMockResource(fake.WithControllerRef(fake.NewMockResource(fake.WithUID("bar")), schema.EmptyObjectKind.GroupVersionKind())),
+				},
+			},
+			want: want{
+				err: errors.New(errNotController),
+			},
+		},
 		"DeletionFailed": {
 			reason: "It should return error if deletion has failed",
 			args: args{
@@ -463,7 +479,7 @@ func TestAPIOrderedDeleter_Delete(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			d := NewAPIOrderedDeleter(tc.args.kube)
-			deleting, err := d.Delete(context.Background(), tc.args.list)
+			deleting, err := d.Delete(context.Background(), tc.args.cr, tc.args.list)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("Delete(...): -want, +got:\n%s", diff)
 			}

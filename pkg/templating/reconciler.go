@@ -22,11 +22,8 @@ import (
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/json"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -35,7 +32,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
-	runtimeresource "github.com/crossplane/crossplane-runtime/pkg/resource"
+	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 
 	"github.com/crossplane/templating-controller/pkg/resource"
 )
@@ -59,7 +56,6 @@ const (
 	errAddFinalizer          = "cannot add finalizer to parent resource"
 	errRemoveFinalizer       = "cannot remove finalizer from parent resource"
 	errApply                 = "apply failed"
-	errCreateChildResource   = "could not create child resource"
 	errGetChildResource      = "could not get child resource"
 
 	msgWaitingForDeletion = "waiting for deletion of child resources"
@@ -79,7 +75,7 @@ func WithChildResourceDeleter(d ChildResourceDeleter) ReconcilerOption {
 
 // WithFinalizer returns a ReconcilerOption that changes the
 // Finalizer.
-func WithFinalizer(f runtimeresource.Finalizer) ReconcilerOption {
+func WithFinalizer(f rresource.Finalizer) ReconcilerOption {
 	return func(reconciler *Reconciler) {
 		reconciler.finalizer = f
 	}
@@ -154,13 +150,16 @@ func NewReconciler(m manager.Manager, of schema.GroupVersionKind, options ...Rec
 	}
 
 	r := &Reconciler{
-		kube:              m.GetClient(),
+		client: rresource.ClientApplicator{
+			Client:     m.GetClient(),
+			Applicator: rresource.NewAPIPatchingApplicator(m.GetClient()),
+		},
 		newParentResource: nr,
 		shortWait:         defaultShortWait,
 		longWait:          defaultLongWait,
 		log:               logging.NewNopLogger(),
 		templating:        &NopEngine{},
-		finalizer:         runtimeresource.NewAPIFinalizer(m.GetClient(), finalizer),
+		finalizer:         rresource.NewAPIFinalizer(m.GetClient(), finalizer),
 		children:          defaultCRChildren(m.GetClient()),
 	}
 
@@ -173,14 +172,14 @@ func NewReconciler(m manager.Manager, of schema.GroupVersionKind, options ...Rec
 // Reconciler is used to reconcile an arbitrary CRD whose GroupVersionKind
 // is supplied.
 type Reconciler struct {
-	kube              client.Client
+	client            rresource.ClientApplicator
 	newParentResource func() resource.ParentResource
 	shortWait         time.Duration
 	longWait          time.Duration
 	log               logging.Logger
 
 	templating Engine
-	finalizer  runtimeresource.Finalizer
+	finalizer  rresource.Finalizer
 	children   crChildren
 }
 
@@ -194,7 +193,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) { // nolin
 	log := r.log.WithValues("parent-resource", req)
 
 	cr := r.newParentResource()
-	if err := r.kube.Get(ctx, req.NamespacedName, cr); err != nil {
+	if err := r.client.Get(ctx, req.NamespacedName, cr); err != nil {
 		// There's no need to requeue if the resource no longer exists. Otherwise
 		// we'll be requeued implicitly because we return an error.
 		log.Info("Cannot get the requested resource", "error", err)
@@ -205,33 +204,33 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) { // nolin
 	if err != nil {
 		log.Info("Cannot run templating operation", "error", err)
 		omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errTemplatingOperation))))
-		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
+		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.client.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 
 	childResources, err = r.children.Patch(cr, childResources)
 	if err != nil {
 		log.Info("Cannot run patchers on the child resources", "error", err)
 		omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errChildResourcePatchers))))
-		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
+		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.client.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 
 	if meta.WasDeleted(cr) {
-		deleting, err := r.children.Delete(ctx, childResources)
+		deleting, err := r.children.Delete(ctx, cr, childResources)
 		if err != nil {
 			log.Info(errDeleter, "error", err)
 			omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errDeleter))))
-			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
+			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.client.Status().Update(ctx, cr), errUpdateResourceStatus)
 		}
 
 		if len(deleting) > 0 {
 			omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileSuccess().WithMessage(msgWaitingForDeletion)))
-			return ctrl.Result{RequeueAfter: tinyWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
+			return ctrl.Result{RequeueAfter: tinyWait}, errors.Wrap(r.client.Status().Update(ctx, cr), errUpdateResourceStatus)
 		}
 
 		if err := r.finalizer.RemoveFinalizer(ctx, cr); client.IgnoreNotFound(err) != nil {
 			log.Info(errRemoveFinalizer, "error", err)
 			omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errRemoveFinalizer))))
-			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
+			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.client.Status().Update(ctx, cr), errUpdateResourceStatus)
 		}
 		return reconcile.Result{Requeue: false}, nil
 	}
@@ -239,36 +238,19 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) { // nolin
 	if err := r.finalizer.AddFinalizer(ctx, cr); err != nil {
 		log.Info(errAddFinalizer, "error", err)
 		omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, errAddFinalizer))))
-		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
+		return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.client.Status().Update(ctx, cr), errUpdateResourceStatus)
 	}
 
 	for _, o := range childResources {
-		if err := Apply(ctx, r.kube, o); err != nil {
+		if err := r.client.Apply(ctx, o, rresource.MustBeControllableBy(cr.GetUID())); err != nil {
 			log.Info("Cannot apply the changes to the child resources", "error", err)
 			omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileError(errors.Wrap(err, fmt.Sprintf("%s: %s/%s of type %s", errApply, o.GetName(), o.GetNamespace(), o.GetObjectKind().GroupVersionKind().String())))))
-			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
+			return ctrl.Result{RequeueAfter: r.shortWait}, errors.Wrap(r.client.Status().Update(ctx, cr), errUpdateResourceStatus)
 		}
 	}
 	log.Debug("Reconciliation finished with success")
 	omitError(log, resource.SetConditions(cr, v1alpha1.ReconcileSuccess()))
-	return ctrl.Result{RequeueAfter: r.longWait}, errors.Wrap(r.kube.Status().Update(ctx, cr), errUpdateResourceStatus)
-}
-
-// Apply creates if the object doesn't exist and patches if it exists.
-func Apply(ctx context.Context, kube client.Client, o resource.ChildResource) error {
-	existing := o.DeepCopyObject().(resource.ChildResource)
-	err := kube.Get(ctx, types.NamespacedName{Name: o.GetName(), Namespace: o.GetNamespace()}, existing)
-	if kerrors.IsNotFound(err) {
-		return errors.Wrap(kube.Create(ctx, o), errCreateChildResource)
-	}
-	if err != nil {
-		return errors.Wrap(err, errGetChildResource)
-	}
-	patchJSON, err := json.Marshal(o)
-	if err != nil {
-		return err
-	}
-	return kube.Patch(ctx, existing, client.RawPatch(types.MergePatchType, patchJSON))
+	return ctrl.Result{RequeueAfter: r.longWait}, errors.Wrap(r.client.Status().Update(ctx, cr), errUpdateResourceStatus)
 }
 
 func omitError(log logging.Logger, err error) {

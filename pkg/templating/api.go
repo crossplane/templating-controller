@@ -18,18 +18,21 @@ package templating
 
 import (
 	"context"
+
 	"math"
 	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
+	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane/pkg/stacks"
 
 	"github.com/crossplane/templating-controller/pkg/resource"
@@ -39,6 +42,7 @@ import (
 const (
 	errDeleteChildResource = "cannot delete child resource"
 	errPriorityToInt       = "cannot convert deletion priority into integer"
+	errNotController       = "child resource is not controlled by given parent"
 )
 
 // Constants used for annotations.
@@ -69,7 +73,7 @@ type OwnerReferenceAdder struct{}
 
 // Patch patches the child resources with information in resource.ParentResource.
 func (lo OwnerReferenceAdder) Patch(cr resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
-	ref := meta.AsOwner(meta.ReferenceTo(cr, cr.GroupVersionKind()))
+	ref := meta.AsController(meta.ReferenceTo(cr, cr.GroupVersionKind()))
 	trueVal := true
 	ref.BlockOwnerDeletion = &trueVal
 	for _, o := range list {
@@ -181,7 +185,7 @@ type APIOrderedDeleter struct {
 
 // Delete executes an ordered deletion of child resources depending on their
 // deletion priority.
-func (d *APIOrderedDeleter) Delete(ctx context.Context, list []resource.ChildResource) ([]resource.ChildResource, error) {
+func (d *APIOrderedDeleter) Delete(ctx context.Context, cr resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
 	hp := int64(math.MinInt64)
 	del := []resource.ChildResource{}
 	for _, res := range list {
@@ -197,39 +201,44 @@ func (d *APIOrderedDeleter) Delete(ctx context.Context, list []resource.ChildRes
 		if err != nil {
 			return nil, errors.Wrap(err, errPriorityToInt)
 		}
-		// We directly skip the case where we are sure that the resource
-		// has a lower priority than current highest priority regardless of
-		// whether it exists or not.
-		if p < hp {
-			continue
-		}
+
 		nn := types.NamespacedName{Name: res.GetName(), Namespace: res.GetNamespace()}
-		if err := d.kube.Get(ctx, nn, res); err != nil {
-			// The resources that do not exist anymore should not have any
-			// effect in our calculations.
-			if kerrors.IsNotFound(err) {
-				continue
-			}
+		err = d.kube.Get(ctx, nn, res)
+		if client.IgnoreNotFound(err) != nil {
 			return nil, errors.Wrap(err, errGetChildResource)
 		}
-		// If the priority of the resource is higher than our current highest
-		// priority level, then we should discard everything in the deletion queue
-		// and set the new highest priority.
-		if p > hp {
-			hp = p
-			del = []resource.ChildResource{res}
+		// The resources that do not exist anymore should not have any
+		// effect in our calculations.
+		if kerrors.IsNotFound(err) {
 			continue
 		}
-		// If the resource is on the highest priority level, then it should be
-		// deleted in this iteration.
-		del = append(del, res)
+		// A new high should reset the deletion list and set the new highest.
+		// If the resource is on the same priority level, then it should be added
+		// to the deletion list. If it's neither same or higher, then it should
+		// be skipped.
+		switch {
+		case p > hp:
+			hp = p
+			del = []resource.ChildResource{res}
+		case p == hp:
+			del = append(del, res)
+		}
 	}
 	for _, res := range del {
-		if err := d.kube.Delete(ctx, res); client.IgnoreNotFound(err) != nil {
-			return nil, errors.Wrap(err, errDeleteChildResource)
+		if err := d.deleteIfControllable(ctx, res, cr); err != nil {
+			return nil, err
 		}
 	}
 	return del, nil
+}
+
+// TODO(muvaf): This function is similar to Apply with MustBeControllableBy option
+// and should be in crossplane-runtime.
+func (d *APIOrderedDeleter) deleteIfControllable(ctx context.Context, obj, controller rresource.Object) error {
+	if metav1.GetControllerOf(obj) != nil && !metav1.IsControlledBy(obj, controller) {
+		return errors.New(errNotController)
+	}
+	return errors.Wrap(client.IgnoreNotFound(d.kube.Delete(ctx, obj)), errDeleteChildResource)
 }
 
 // todo: temp solution to detect provider kind.

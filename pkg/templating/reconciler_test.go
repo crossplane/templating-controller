@@ -23,7 +23,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -31,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
-	runtimeresource "github.com/crossplane/crossplane-runtime/pkg/resource"
+	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 	runtimefake "github.com/crossplane/crossplane-runtime/pkg/resource/fake"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 
@@ -159,7 +158,7 @@ func TestReconcile(t *testing.T) {
 					WithChildResourcePatcher(ChildResourcePatcherFunc(func(_ resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
 						return list, nil
 					})),
-					WithChildResourceDeleter(ChildResourceDeleterFunc(func(_ context.Context, _ []resource.ChildResource) ([]resource.ChildResource, error) {
+					WithChildResourceDeleter(ChildResourceDeleterFunc(func(_ context.Context, _ resource.ParentResource, _ []resource.ChildResource) ([]resource.ChildResource, error) {
 						return nil, errBoom
 					})),
 				},
@@ -195,7 +194,7 @@ func TestReconcile(t *testing.T) {
 					WithChildResourcePatcher(ChildResourcePatcherFunc(func(_ resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
 						return list, nil
 					})),
-					WithChildResourceDeleter(ChildResourceDeleterFunc(func(_ context.Context, _ []resource.ChildResource) ([]resource.ChildResource, error) {
+					WithChildResourceDeleter(ChildResourceDeleterFunc(func(_ context.Context, _ resource.ParentResource, _ []resource.ChildResource) ([]resource.ChildResource, error) {
 						return []resource.ChildResource{fake.NewMockResource()}, nil
 					})),
 				},
@@ -231,10 +230,10 @@ func TestReconcile(t *testing.T) {
 					WithChildResourcePatcher(ChildResourcePatcherFunc(func(_ resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
 						return list, nil
 					})),
-					WithChildResourceDeleter(ChildResourceDeleterFunc(func(_ context.Context, _ []resource.ChildResource) ([]resource.ChildResource, error) {
+					WithChildResourceDeleter(ChildResourceDeleterFunc(func(_ context.Context, _ resource.ParentResource, _ []resource.ChildResource) ([]resource.ChildResource, error) {
 						return nil, nil
 					})),
-					WithFinalizer(runtimeresource.FinalizerFns{RemoveFinalizerFn: func(_ context.Context, _ runtimeresource.Object) error {
+					WithFinalizer(rresource.FinalizerFns{RemoveFinalizerFn: func(_ context.Context, _ rresource.Object) error {
 						return errBoom
 					}}),
 				},
@@ -258,10 +257,10 @@ func TestReconcile(t *testing.T) {
 					WithChildResourcePatcher(ChildResourcePatcherFunc(func(_ resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
 						return list, nil
 					})),
-					WithChildResourceDeleter(ChildResourceDeleterFunc(func(_ context.Context, _ []resource.ChildResource) ([]resource.ChildResource, error) {
+					WithChildResourceDeleter(ChildResourceDeleterFunc(func(_ context.Context, _ resource.ParentResource, _ []resource.ChildResource) ([]resource.ChildResource, error) {
 						return nil, nil
 					})),
-					WithFinalizer(runtimeresource.FinalizerFns{RemoveFinalizerFn: func(_ context.Context, _ runtimeresource.Object) error {
+					WithFinalizer(rresource.FinalizerFns{RemoveFinalizerFn: func(_ context.Context, _ rresource.Object) error {
 						return nil
 					}}),
 				},
@@ -292,7 +291,7 @@ func TestReconcile(t *testing.T) {
 					WithChildResourcePatcher(ChildResourcePatcherFunc(func(_ resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
 						return list, nil
 					})),
-					WithFinalizer(runtimeresource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ runtimeresource.Object) error {
+					WithFinalizer(rresource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ rresource.Object) error {
 						return errBoom
 					}}),
 				},
@@ -315,7 +314,10 @@ func TestReconcile(t *testing.T) {
 						if err != nil {
 							t.Errorf("Reconcile(...): error getting condition\n%s", err.Error())
 						}
-						wantCond := v1alpha1.ReconcileError(errors.Wrap(errBoom, fmt.Sprintf("%s: %s/%s of type %s", errApply, fakeName, fakeNamespace, schema.EmptyObjectKind.GroupVersionKind().String())))
+						// TODO(muvaf): The err string "cannot patch object" is
+						// copied from the implementation. See
+						// https://github.com/crossplane/crossplane-runtime/issues/178
+						wantCond := v1alpha1.ReconcileError(errors.Wrap(errBoom, fmt.Sprintf("%s: %s/%s of type %s: cannot patch object", errApply, fakeName, fakeNamespace, schema.EmptyObjectKind.GroupVersionKind().String())))
 						if diff := cmp.Diff(wantCond, gotCond); diff != "" {
 							t.Errorf("Reconcile(...): -want, +got:\n%s", diff)
 						}
@@ -389,63 +391,6 @@ func TestReconcile(t *testing.T) {
 				t.Errorf("Reconcile(...): -want, +got:\n%s", diff)
 			}
 
-		})
-	}
-}
-
-func TestApply(t *testing.T) {
-	type args struct {
-		kube client.Client
-		o    resource.ChildResource
-	}
-	type want struct {
-		err error
-	}
-
-	cases := map[string]struct {
-		args
-		want
-	}{
-		"NotFoundCreate": {
-			args: args{
-				kube: &test.MockClient{
-					MockGet:    test.NewMockGetFn(kerrors.NewNotFound(schema.GroupResource{}, fakeName)),
-					MockCreate: test.NewMockCreateFn(errBoom),
-				},
-				o: fake.NewMockResource(),
-			},
-			want: want{
-				err: errors.Wrap(errBoom, errCreateChildResource),
-			},
-		},
-		"GetFailed": {
-			args: args{
-				kube: &test.MockClient{
-					MockGet: test.NewMockGetFn(errBoom),
-				},
-				o: fake.NewMockResource(),
-			},
-			want: want{
-				err: errors.Wrap(errBoom, errGetChildResource),
-			},
-		},
-		"Success": {
-			args: args{
-				kube: &test.MockClient{
-					MockGet:   test.NewMockGetFn(nil),
-					MockPatch: test.NewMockPatchFn(nil),
-				},
-				o: fake.NewMockResource(),
-			},
-		},
-	}
-
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			err := Apply(context.Background(), tc.args.kube, tc.args.o)
-			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
-				t.Errorf("Reconcile(...): -want, +got:\n%s", diff)
-			}
 		})
 	}
 }

@@ -71,14 +71,14 @@ func (pre ChildResourcePatcherChain) Patch(cr resource.ParentResource, list []re
 
 // ChildResourceDeleter deletes the child resources.
 type ChildResourceDeleter interface {
-	Delete(ctx context.Context, list []resource.ChildResource) ([]resource.ChildResource, error)
+	Delete(ctx context.Context, cr resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error)
 }
 
 // ChildResourceDeleterFunc makes it easier to provide only a function as
 // ChildResourceDeleter
-type ChildResourceDeleterFunc func(ctx context.Context, list []resource.ChildResource) ([]resource.ChildResource, error)
+type ChildResourceDeleterFunc func(ctx context.Context, cr resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error)
 
 // Delete calls the ChildResourceDeleterFunc function.
-func (pre ChildResourceDeleterFunc) Delete(ctx context.Context, list []resource.ChildResource) ([]resource.ChildResource, error) {
-	return pre(ctx, list)
+func (pre ChildResourceDeleterFunc) Delete(ctx context.Context, cr resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
+	return pre(ctx, cr, list)
 }
