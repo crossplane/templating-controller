@@ -39,9 +39,9 @@ import (
 	"github.com/crossplane/crossplane/apis/stacks"
 	"github.com/crossplane/crossplane/apis/stacks/v1alpha1"
 
-	"github.com/crossplane/templating-controller/pkg/controllers"
 	"github.com/crossplane/templating-controller/pkg/operations/helm3"
 	"github.com/crossplane/templating-controller/pkg/operations/kustomize"
+	"github.com/crossplane/templating-controller/pkg/templating"
 )
 
 // Engine name constants.
@@ -102,8 +102,8 @@ func main() {
 	}
 	crLogger := logging.NewLogrLogger(zl.WithName(gvk.GroupKind().String()))
 
-	options := []controllers.TemplatingReconcilerOption{
-		controllers.WithLogger(crLogger),
+	options := []templating.ReconcilerOption{
+		templating.WithLogger(crLogger),
 	}
 	switch sd.Spec.Behavior.Engine.Type {
 	case KustomizeEngine:
@@ -116,10 +116,10 @@ func main() {
 			}
 		}
 		options = append(options,
-			controllers.WithTemplatingEngine(kustomize.NewKustomizeEngine(kustomization, kustOpts...)))
+			templating.WithEngine(kustomize.NewKustomizeEngine(kustomization, kustOpts...)))
 	case Helm3Engine:
 		options = append(options,
-			controllers.WithTemplatingEngine(helm3.NewHelm3Engine(
+			templating.WithEngine(helm3.NewHelm3Engine(
 				helm3.WithResourcePath(*resourceDirInput),
 				helm3.WithLogger(crLogger)),
 			),
@@ -127,7 +127,7 @@ func main() {
 	default:
 		kingpin.FatalUsage("the engine type %s is not supported", sd.Spec.Behavior.Engine.Type)
 	}
-	controller := controllers.NewTemplatingReconciler(mgr, gvk, options...)
+	controller := templating.NewReconciler(mgr, gvk, options...)
 	u := &unstructured.Unstructured{}
 	u.SetGroupVersionKind(gvk)
 	kingpin.FatalIfError(

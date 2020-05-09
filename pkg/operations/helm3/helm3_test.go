@@ -61,7 +61,7 @@ func TestRun(t *testing.T) {
 
 	type args struct {
 		cr resource.ParentResource
-		e  resource.TemplatingEngine
+		e  *Engine
 	}
 	type want struct {
 		result      []resource.ChildResource

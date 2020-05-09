@@ -40,16 +40,16 @@ const (
 	errHelm3Template = "helm3 template call failed"
 )
 
-// WithResourcePath returns an Option that changes the resource path of the engine.
+// WithResourcePath returns an Option that changes the resource path of the Engine.
 func WithResourcePath(path string) Option {
-	return func(e *engine) {
-		e.resourcePath = path
+	return func(e *Engine) {
+		e.ResourcePath = path
 	}
 }
 
-// WithLogger returns an Option that changes the logger of the engine.
+// WithLogger returns an Option that changes the logger of the Engine.
 func WithLogger(l logging.Logger) Option {
-	return func(e *engine) {
+	return func(e *Engine) {
 		// NOTE(muvaf): Even though l.Debug seems to satisfy action.DebugLog interface,
 		// they are completely different given that former user the first argument
 		// as context while the latter uses it as format string.
@@ -59,10 +59,10 @@ func WithLogger(l logging.Logger) Option {
 	}
 }
 
-// NewHelm3Engine returns a new Helm3 engine to be used as resource.TemplatingEngine.
-func NewHelm3Engine(o ...Option) resource.TemplatingEngine {
-	h := &engine{
-		resourcePath: defaultRootPath,
+// NewHelm3Engine returns a new Helm3 Engine to be used as resource.TemplatingEngine.
+func NewHelm3Engine(o ...Option) *Engine {
+	h := &Engine{
+		ResourcePath: defaultRootPath,
 	}
 	for _, f := range o {
 		f(h)
@@ -70,18 +70,18 @@ func NewHelm3Engine(o ...Option) resource.TemplatingEngine {
 	return h
 }
 
-// engine is used to do the templating operation via Helm3.
-type engine struct {
-	// resourcePath is the folder that the base resources reside in the
+// Engine is used to do the templating operation via Helm3.
+type Engine struct {
+	// ResourcePath is the folder that the base resources reside in the
 	// filesystem. It should be given as absolute path.
-	resourcePath string
+	ResourcePath string
 
 	// debugLog is used by helm library to debugLog the debugging level logs.
 	debugLog action.DebugLog
 }
 
 // Run returns the result of the templating operation.
-func (e *engine) Run(cr resource.ParentResource) ([]resource.ChildResource, error) {
+func (e *Engine) Run(cr resource.ParentResource) ([]resource.ChildResource, error) {
 	values := map[string]interface{}{}
 	valuesMap, exists := cr.UnstructuredContent()["spec"]
 	if exists {
@@ -99,8 +99,8 @@ func (e *engine) Run(cr resource.ParentResource) ([]resource.ChildResource, erro
 	return resources, errors.Wrap(err, errParse)
 }
 
-func (e *engine) template(releaseName string, values map[string]interface{}) (string, error) {
-	chart, err := loader.Load(e.resourcePath)
+func (e *Engine) template(releaseName string, values map[string]interface{}) (string, error) {
+	chart, err := loader.Load(e.ResourcePath)
 	if err != nil {
 		return "", err
 	}

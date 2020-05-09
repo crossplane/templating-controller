@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/types"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -69,14 +71,22 @@ func WithAdditionalLabels(a map[string]string) MockResourceOption {
 	}
 }
 
-// WithOwnerReferenceTo returns a MockResourceOption that adds an OwnerReference
+// WithControllerRef returns a MockResourceOption that adds an OwnerReference
 // that points to the given object to the *MockResource instance.
-func WithOwnerReferenceTo(o metav1.Object, gvk schema.GroupVersionKind) MockResourceOption {
+func WithControllerRef(o metav1.Object, gvk schema.GroupVersionKind) MockResourceOption {
 	return func(r *MockResource) {
-		ref := meta.AsOwner(meta.ReferenceTo(o, gvk))
+		ref := meta.AsController(meta.ReferenceTo(o, gvk))
 		trueVal := true
 		ref.BlockOwnerDeletion = &trueVal
 		meta.AddOwnerReference(r, ref)
+	}
+}
+
+// WithUID returns a MockResourceOption that changes UID of the *MockResource
+// instance.
+func WithUID(uid types.UID) MockResourceOption {
+	return func(r *MockResource) {
+		r.SetUID(uid)
 	}
 }
 
