@@ -30,7 +30,7 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
-	"github.com/crossplane/crossplane/pkg/stacks"
+	"github.com/crossplane/crossplane/pkg/packages"
 
 	"github.com/crossplane/templating-controller/pkg/resource"
 	"github.com/crossplane/templating-controller/pkg/resource/fake"
@@ -256,8 +256,8 @@ func TestParentLabelSetAdder(t *testing.T) {
 			},
 			want: want{
 				result: []resource.ChildResource{
-					fake.NewMockResource(fake.WithAdditionalLabels(stacks.ParentLabels(parent))),
-					fake.NewMockResource(fake.WithAdditionalLabels(stacks.ParentLabels(parent))),
+					fake.NewMockResource(fake.WithAdditionalLabels(packages.ParentLabels(parent))),
+					fake.NewMockResource(fake.WithAdditionalLabels(packages.ParentLabels(parent))),
 				},
 			},
 		},

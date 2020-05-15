@@ -31,7 +31,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/crossplane/crossplane-runtime/pkg/test"
-	"github.com/crossplane/crossplane/apis/stacks/v1alpha1"
+	"github.com/crossplane/crossplane/apis/packages/v1alpha1"
 
 	"github.com/crossplane/templating-controller/pkg/resource"
 )
