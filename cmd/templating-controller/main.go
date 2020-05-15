@@ -36,8 +36,8 @@ import (
 	kustomizeapi "sigs.k8s.io/kustomize/api/types"
 
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
-	"github.com/crossplane/crossplane/apis/stacks"
-	"github.com/crossplane/crossplane/apis/stacks/v1alpha1"
+	"github.com/crossplane/crossplane/apis/packages"
+	"github.com/crossplane/crossplane/apis/packages/v1alpha1"
 
 	"github.com/crossplane/templating-controller/pkg/operations/helm3"
 	"github.com/crossplane/templating-controller/pkg/operations/kustomize"
@@ -75,7 +75,7 @@ func main() {
 	gvk := schema.FromAPIVersionAndKind(sd.Spec.Behavior.CRD.APIVersion, sd.Spec.Behavior.CRD.Kind)
 
 	kingpin.FatalIfError(clientgoscheme.AddToScheme(scheme), "could not register client-go scheme")
-	kingpin.FatalIfError(stacks.AddToScheme(scheme), "could not register stacks group scheme")
+	kingpin.FatalIfError(packages.AddToScheme(scheme), "could not register stacks group scheme")
 
 	mgrOptions := ctrl.Options{
 		Scheme: scheme,

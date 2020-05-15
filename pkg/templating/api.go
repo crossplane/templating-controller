@@ -30,7 +30,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
 	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
-	"github.com/crossplane/crossplane/pkg/stacks"
+	"github.com/crossplane/crossplane/pkg/packages"
 
 	"github.com/crossplane/templating-controller/pkg/resource"
 )
@@ -152,7 +152,7 @@ type ParentLabelSetAdder struct{}
 // Patch patches the child resources with information in resource.ParentResource.
 func (lo ParentLabelSetAdder) Patch(cr resource.ParentResource, list []resource.ChildResource) ([]resource.ChildResource, error) {
 	for _, o := range list {
-		meta.AddLabels(o, stacks.ParentLabels(cr))
+		meta.AddLabels(o, packages.ParentLabels(cr))
 	}
 	return list, nil
 }
