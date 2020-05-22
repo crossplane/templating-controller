@@ -225,5 +225,6 @@ func (d *APIOrderedDeleter) deleteIfControllable(ctx context.Context, obj, contr
 	if metav1.GetControllerOf(obj) != nil && !metav1.IsControlledBy(obj, controller) {
 		return errors.New(errNotController)
 	}
-	return errors.Wrap(client.IgnoreNotFound(d.kube.Delete(ctx, obj)), errDeleteChildResource)
+	err := client.IgnoreNotFound(d.kube.Delete(ctx, obj, client.PropagationPolicy(metav1.DeletePropagationForeground)))
+	return errors.Wrap(err, errDeleteChildResource)
 }
